@@ -1,0 +1,38 @@
+# --- Credenciales y configuración local -------------------------------------
+# NUNCA subir: contiene SECRET_KEY y el token de Mercado Pago
+.env
+.env.*
+!.env.example
+
+# --- Base de datos ----------------------------------------------------------
+# La base local guarda ventas reales y los PIN de los usuarios (hasheados).
+# Un PIN de 4 dígitos se rompe en segundos si el hash es público.
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+!**/ejemplo.db
+
+# --- Python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+env/
+
+# --- Node -------------------------------------------------------------------
+node_modules/
+frontend/dist/
+frontend/dev-dist/
+
+# --- Editores y sistema operativo -------------------------------------------
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# --- Temporales -------------------------------------------------------------
+*.bak
+*.tmp
+scratch_*.py

@@ -1,0 +1,99 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Colores de marca como triplete RGB (sin rgb()) para que Tailwind pueda
+     aplicarles opacidad con la sintaxis rgb(var(--x) / <alpha>).
+     ConfigProvider los sobreescribe con los que cargó el comercio. */
+  --color-brand: 130 81 238;
+  --color-brand-hover: 157 118 242;
+  --color-brand-light: 191 165 247;
+  --color-accent: 0 242 254;
+  --color-accent-hover: 79 172 254;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-neutral-bg1 text-text-primary font-sans antialiased selection:bg-brand selection:text-white;
+  min-height: 100vh;
+  /* Subtle radial gradient background */
+  background-image: radial-gradient(circle at top right, rgb(var(--color-brand) / 0.15), transparent 40%),
+                    radial-gradient(circle at bottom left, rgb(var(--color-accent) / 0.1), transparent 40%);
+  background-attachment: fixed;
+}
+
+@layer components {
+  .glass {
+    @apply backdrop-blur-xl bg-white/5 border border-white/15 shadow-lg;
+  }
+  .glass-card {
+    @apply backdrop-blur-xl bg-white/5 border border-white/15 rounded-2xl shadow-xl shadow-black/20 transition-all duration-300;
+  }
+  .glass-card:hover {
+    @apply border-white/25 bg-white/10 shadow-glow;
+  }
+  .glass-input {
+    @apply backdrop-blur-md bg-black/20 border border-white/15 focus:border-brand focus:bg-black/40 outline-none text-text-primary placeholder:text-text-muted transition-all duration-300 focus:shadow-glow;
+  }
+  .btn-primary {
+    @apply bg-brand hover:bg-brand-hover text-white font-bold rounded-xl transition-all duration-300 hover:shadow-glow hover:-translate-y-1 active:translate-y-0 disabled:bg-neutral-bg4 disabled:text-text-muted disabled:shadow-none disabled:transform-none;
+  }
+}
+
+/* Custom scrollbar for scrollable panels */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--color-brand) / 0.5) transparent;
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgb(var(--color-brand) / 0.5);
+  border-radius: 999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(var(--color-brand) / 0.8);
+}
+
+:focus-visible {
+  outline: 2px solid rgb(var(--color-brand));
+  outline-offset: 2px;
+}
+
+/* Print Styles */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .print-area, .print-area * {
+    visibility: visible;
+  }
+  
+  .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    padding: 0;
+    margin: 0;
+    color: black !important;
+    background: white !important;
+  }
+
+  /* Force colors for printing */
+  .print-area .text-white { color: black !important; }
+  .print-area .text-gray-400, .print-area .text-text-secondary { color: #333 !important; }
+  .print-area .bg-brand { background-color: rgb(var(--color-brand)) !important; color: white !important; -webkit-print-color-adjust: exact; }
+}

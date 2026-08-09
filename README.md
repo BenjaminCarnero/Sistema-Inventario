@@ -1,0 +1,272 @@
+# Sistema de Inventario y Punto de Venta
+
+Punto de venta e inventario para comercios chicos. Funciona **sin internet**: el
+cajero sigue vendiendo aunque se caiga el wifi o el servidor, y las ventas se
+sincronizan solas cuando vuelve la conexión.
+
+Pensado para operar **sin mouse**: el lector de código de barras escribe en el
+campo de código y con Enter se encadena toda la venta.
+
+---
+
+## Qué hace
+
+**Punto de venta**
+- Lector de código de barras por cámara o lector USB
+- Operación completa por teclado (flechas y Enter)
+- Cobro en efectivo con cálculo de vuelto, tarjeta, transferencia y Mercado Pago QR
+- Ticket imprimible en 80 mm y envío por WhatsApp
+- Descuentos por porcentaje o monto fijo, globales o por producto
+- **Modo sin conexión**: vende, guarda y sincroniza al volver la red
+
+**Backoffice**
+- Catálogo con imágenes, búsqueda, filtros y etiquetas de código de barras
+- Alertas de stock bajo
+- Reportes: recaudación diaria, productos más vendidos, rentabilidad y arqueos de caja
+- Exportación a Excel por rango de fechas
+- Gestión de usuarios con tres roles: administrador, encargado y cajero
+
+**Configurable sin tocar código**
+- Logo, colores y nombre del comercio (white-label)
+- Impuestos: alícuota, nombre e incluido en el precio o sumado al cobrar
+- Moneda, métodos de pago habilitados, topes de efectivo y textos del ticket
+
+---
+
+## Requisitos
+
+- **Python 3.11+** ([descargar](https://www.python.org/downloads/))
+- **Node.js 20+** ([descargar](https://nodejs.org/))
+
+No hace falta instalar ninguna base de datos: por defecto usa SQLite, que es un
+solo archivo.
+
+---
+
+## Instalación
+
+### 1. Clonar
+
+```bash
+git clone https://github.com/BenjaminCarnero/Sistema-Inventario.git
+cd Sistema-Inventario
+```
+
+### 2. Backend
+
+```bash
+cd backend
+python -m venv venv
+```
+
+Activar el entorno:
+
+```bash
+venv\Scripts\activate
+```
+
+En Linux o macOS es `source venv/bin/activate`.
+
+Instalar las dependencias:
+
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Configurar las credenciales
+
+Copiá el archivo de ejemplo:
+
+```bash
+copy .env.example .env
+```
+
+Generá una clave de firma y pegala en `SECRET_KEY` dentro del `.env`:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+> El `.env` no se sube al repositorio. Es el único lugar donde viven las
+> credenciales.
+
+### 4. Crear la base y el primer usuario
+
+```bash
+alembic upgrade head
+python seed_admin.py
+```
+
+El script pide el PIN por teclado. No hay usuario ni contraseña por defecto.
+
+### 5. Levantar el backend
+
+```bash
+uvicorn app.main:app --reload --port 8001
+```
+
+Queda escuchando en `http://127.0.0.1:8001`. La documentación interactiva está
+en `/docs` (sólo en modo desarrollo).
+
+### 6. Frontend
+
+En **otra terminal**:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Abrí `http://localhost:5173`. El punto de venta está en `/` y el backoffice en
+`/admin`.
+
+---
+
+## Cómo se usa
+
+### Vender
+
+| Tecla | Qué hace |
+|---|---|
+| Código + **Enter** | Agrega el producto al carrito |
+| **Enter** con el campo vacío | Abre el cobro |
+| **↑ ↓** | Elegir una línea del carrito |
+| **+** / **−** | Sumar o restar unidades |
+| **Supr** | Quitar la línea |
+| **↑ ↓** y **Enter** | Elegir y confirmar el método de pago |
+| **Enter** en efectivo | Cobra; con el campo vacío asume importe justo |
+| **Enter** en el ticket | Cierra e inicia la venta siguiente |
+| **Esc** | Volver o cancelar |
+| **F1** | Ver todos los atajos |
+
+El foco vuelve solo al campo de código, así el lector siempre funciona.
+
+### Sin conexión
+
+Si se cae internet o el servidor, el POS lo detecta y avisa. Se puede seguir
+vendiendo: las ventas se guardan en el equipo y el encabezado muestra cuántas
+faltan enviar. Al volver la conexión se sincronizan solas, sin duplicarse.
+
+Mercado Pago no aparece mientras no haya conexión, porque necesita el servidor.
+
+**Un corte de luz es otra cosa**: ahí se apaga el equipo. Conviene una UPS para
+la PC y el router, o trabajar desde una tablet con datos móviles.
+
+### Configurar el negocio
+
+En **Admin › Configuración › Parámetros del sistema** se cambian el logo, los
+colores, el IVA, la moneda, los métodos de pago y los textos del ticket. Los
+cambios llegan al POS de todos los cajeros apenas se guardan.
+
+Los valores de fábrica son para Argentina: IVA 21% ya incluido en el precio y
+pesos argentinos. Para otro país alcanza con cambiar la alícuota, el nombre del
+impuesto y la moneda.
+
+---
+
+## Puesta en producción
+
+Antes de usarlo con plata de verdad, en el `.env`:
+
+```env
+ENTORNO=produccion
+SECRET_KEY=<una clave larga y propia>
+CORS_ORIGINS=["https://tu-dominio.com"]
+```
+
+Con `ENTORNO=produccion` el arranque **falla** si falta la `SECRET_KEY` o si
+`CORS_ORIGINS` está en `"*"`, se oculta la documentación de la API y se activa
+HSTS.
+
+Además:
+
+- Serví el frontend por **HTTPS**. Sin eso, la cámara del escáner no funciona en
+  la mayoría de los navegadores.
+- Hacé **copias de la base** (`backend/applify.db`). Es un archivo: copiarlo
+  alcanza.
+- Para varias cajas en simultáneo conviene pasar a SQL Server o PostgreSQL
+  cambiando `DATABASE_URL`.
+
+---
+
+## Seguridad
+
+El sistema pasó por una auditoría con explotación real de cada hallazgo. Lo que
+está implementado:
+
+- **El precio sale siempre del catálogo del servidor.** Lo que manda el cliente
+  es informativo: no se puede cobrar un producto de $2.000 a $1 editando el pedido.
+- **Alta de usuarios sólo para administradores.** La única excepción es el
+  primer usuario de una instalación vacía.
+- **Freno a la fuerza bruta**: cinco intentos fallidos bloquean el login un minuto.
+- **Ventas idempotentes**: reintentar la sincronización no duplica la venta.
+- **Aislamiento por rol**: el cajero sólo ve sus propias ventas.
+- **Verificación de importe en Mercado Pago**: no alcanza con que el pago figure
+  aprobado, tiene que coincidir el monto.
+- **Límites de tamaño** de petición y de líneas por venta.
+- Cabeceras `X-Frame-Options`, `X-Content-Type-Options`, CSP, `Referrer-Policy`
+  y HSTS en producción.
+- Los PIN se guardan con **bcrypt**; las consultas usan el ORM, sin SQL armado a mano.
+
+### Qué NO subir nunca al repositorio
+
+- `backend/.env` — la clave de firma y el token de Mercado Pago
+- `backend/applify.db` — las ventas y los PIN hasheados de los usuarios. Un PIN
+  de 4 dígitos se rompe en segundos si alguien consigue el hash.
+
+Las dos cosas ya están en el `.gitignore`.
+
+---
+
+## Estructura
+
+```
+backend/
+  app/
+    main.py               Arranque, CORS, cabeceras y límite de tamaño
+    config.py             Configuración y validaciones de arranque
+    models.py             Tablas
+    schemas.py            Validación de entrada y salida
+    auth.py               Hash de PIN, tokens y anti fuerza bruta
+    dependencies.py       Sesión actual y control de roles
+    configuracion_defaults.py   Parámetros configurables
+    routers/              auth, productos, ventas, cajas, reportes,
+                          pagos, descuentos y configuracion
+  alembic/versions/       Migraciones
+  seed_admin.py           Crea el primer administrador
+
+frontend/src/
+  App.tsx                 Punto de venta
+  Admin.tsx               Backoffice
+  api.ts                  Cliente HTTP
+  db.ts                   Base local (IndexedDB) para el modo sin conexión
+  cajaLocal.ts            Turno de caja recordado en el equipo
+  useConexion.ts          Detecta si el servidor responde de verdad
+  components/             Configuración, toasts, gráficos y logo
+```
+
+---
+
+## Stack
+
+**Backend**: FastAPI · SQLAlchemy · Alembic · SQLite (o SQL Server) · bcrypt · PyJWT
+
+**Frontend**: React 19 · TypeScript · Vite · Tailwind · Dexie (IndexedDB) ·
+Recharts · Framer Motion · PWA
+
+---
+
+## Problemas comunes
+
+**"El servidor no responde" en el POS**
+Verificá que el backend esté levantado en el puerto 8001. Si acabás de bajar
+cambios, reiniciá también `npm run dev`: el proxy se define en `vite.config.ts`
+y sólo se lee al arrancar.
+
+**La cámara no abre**
+Necesita HTTPS salvo en `localhost`. En equipos sin cámara el sistema lo detecta
+y no muestra el pedido de permisos: se usa el lector USB o el ingreso manual.
+
+**`alembic: command not found`**
+Falta activar el entorno virtual (`venv\Scripts\activate`).
