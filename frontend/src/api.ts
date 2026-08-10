@@ -363,9 +363,18 @@ export const api = {
     return this.parseJson(res, 'Error registrando el movimiento');
   },
 
-  async getMovimientosStock(productoId?: number, limite: number = 100) {
-    const filtro = productoId ? `producto_id=${productoId}&` : '';
-    const res = await fetch(`${API_URL}/stock/movimientos?${filtro}limite=${limite}`, { headers: this.headers });
+  async getMovimientosStock(
+    productoId?: number,
+    limite: number = 100,
+    filtros: { tipo?: string, desde?: string, hasta?: string } = {}
+  ) {
+    const params = new URLSearchParams({ limite: String(limite) });
+    if (productoId) params.set('producto_id', String(productoId));
+    if (filtros.tipo) params.set('tipo', filtros.tipo);
+    if (filtros.desde) params.set('desde', filtros.desde);
+    if (filtros.hasta) params.set('hasta', filtros.hasta);
+
+    const res = await fetch(`${API_URL}/stock/movimientos?${params}`, { headers: this.headers });
     if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
     if (!res.ok) throw await this.errorDe(res, 'Error obteniendo el historial de stock');
     return this.parseJson(res, 'Error obteniendo el historial de stock');

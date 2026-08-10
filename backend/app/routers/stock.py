@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -5,6 +6,13 @@ from sqlalchemy.orm import Session
 from app import models, schemas, database, dependencies
 
 router = APIRouter(prefix="/stock", tags=["stock"])
+
+
+def _dia(texto: str) -> datetime:
+    try:
+        return datetime.strptime(texto, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="La fecha debe tener el formato YYYY-MM-DD")
 
 # Mover stock cambia el inventario y la rentabilidad: no es tarea del cajero.
 gestor_stock = dependencies.require_role(
@@ -88,7 +96,10 @@ def registrar_movimiento(
 @router.get("/movimientos", response_model=List[schemas.MovimientoStockOut])
 def historial_movimientos(
     producto_id: Optional[int] = Query(None, description="Filtrar por producto"),
-    limite: int = Query(100, ge=1, le=500),
+    tipo: Optional[str] = Query(None, description="INGRESO, EGRESO o AJUSTE"),
+    desde: Optional[str] = Query(None, description="Fecha inicial, YYYY-MM-DD"),
+    hasta: Optional[str] = Query(None, description="Fecha final, YYYY-MM-DD"),
+    limite: int = Query(100, ge=1, le=2000),
     db: Session = Depends(database.get_db),
     current_user: models.Usuario = Depends(gestor_stock),
 ):
@@ -96,6 +107,18 @@ def historial_movimientos(
     query = db.query(models.MovimientoStock)
     if producto_id:
         query = query.filter(models.MovimientoStock.producto_id == producto_id)
+
+    if tipo:
+        tipo = tipo.upper()
+        if tipo not in {t.value for t in models.TipoMovimientoEnum}:
+            raise HTTPException(status_code=400, detail="Tipo de movimiento desconocido")
+        query = query.filter(models.MovimientoStock.tipo_movimiento == tipo)
+
+    # Las fechas llegan como día suelto; `hasta` incluye el día entero
+    if desde:
+        query = query.filter(models.MovimientoStock.fecha_hora >= _dia(desde))
+    if hasta:
+        query = query.filter(models.MovimientoStock.fecha_hora < _dia(hasta) + timedelta(days=1))
 
     movimientos = query.order_by(models.MovimientoStock.id.desc()).limit(limite).all()
 

@@ -101,3 +101,57 @@ export async function exportarVentasExcel(
     },
   ]).toFile(`ventas_${desde}_a_${hasta}.xlsx`);
 }
+
+interface MovimientoStock {
+  id: number;
+  fecha_hora: string;
+  producto_nombre: string;
+  usuario_nombre: string;
+  tipo_movimiento: string;
+  cantidad: number;
+  motivo?: string | null;
+}
+
+const ETIQUETA_TIPO: Record<string, string> = {
+  INGRESO: 'Entrada',
+  EGRESO: 'Salida',
+  AJUSTE: 'Ajuste',
+};
+
+export async function exportarMovimientosExcel(
+  movimientos: MovimientoStock[],
+  desde: string,
+  hasta: string
+) {
+  const { default: writeXlsxFile } = await import('write-excel-file/browser');
+
+  const filas = [
+    [
+      { value: 'Fecha y hora', ...HEADER },
+      { value: 'Producto', ...HEADER },
+      { value: 'Tipo', ...HEADER },
+      { value: 'Cantidad', ...HEADER },
+      { value: 'Usuario', ...HEADER },
+      { value: 'Motivo', ...HEADER },
+    ],
+    ...movimientos.map(m => [
+      { type: String, value: formatearFecha(m.fecha_hora) },
+      { type: String, value: m.producto_nombre },
+      { type: String, value: ETIQUETA_TIPO[m.tipo_movimiento] || m.tipo_movimiento },
+      // La salida va en negativo para que la columna se pueda sumar directo.
+      // El ajuste queda en positivo: es la diferencia encontrada, y su
+      // dirección está en el motivo.
+      { type: Number, value: m.tipo_movimiento === 'EGRESO' ? -m.cantidad : m.cantidad },
+      { type: String, value: m.usuario_nombre },
+      { type: String, value: m.motivo || '—' },
+    ]),
+  ];
+
+  await writeXlsxFile([
+    {
+      data: filas as any,
+      sheet: 'Movimientos de stock',
+      columns: [22, 34, 12, 12, 18, 46].map(width => ({ width })),
+    },
+  ]).toFile(`movimientos_stock_${desde}_a_${hasta}.xlsx`);
+}

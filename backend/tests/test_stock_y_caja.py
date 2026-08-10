@@ -1,4 +1,6 @@
 """Entrada de mercadería, ajustes de inventario y arqueo de caja."""
+from datetime import datetime, timezone
+
 from app import models
 
 
@@ -92,6 +94,41 @@ class TestHistorial:
         historial = client.get(f"/stock/movimientos?producto_id={producto.id}", headers=auth_admin).json()
         tipos = {m["tipo_movimiento"] for m in historial}
         assert tipos == {"EGRESO", "INGRESO"}
+
+
+class TestFiltrosDelHistorial:
+    """El admin audita el inventario desde acá, así que tiene que poder acotar."""
+
+    def _con_movimientos(self, client, auth, producto, sin_iva):
+        vender(client, auth, producto.id, cantidad=2)
+        client.post("/stock/movimientos", headers=auth, json={
+            "producto_id": producto.id, "cantidad": 10, "tipo_movimiento": "INGRESO",
+        })
+        client.post("/stock/movimientos", headers=auth, json={
+            "producto_id": producto.id, "cantidad": 90, "tipo_movimiento": "AJUSTE",
+        })
+
+    def test_filtra_por_tipo(self, client, auth_admin, producto, sin_iva):
+        self._con_movimientos(client, auth_admin, producto, sin_iva)
+        entradas = client.get("/stock/movimientos?tipo=INGRESO", headers=auth_admin).json()
+        assert [m["tipo_movimiento"] for m in entradas] == ["INGRESO"]
+
+    def test_rechaza_un_tipo_inventado(self, client, auth_admin):
+        assert client.get("/stock/movimientos?tipo=ROBO", headers=auth_admin).status_code == 400
+
+    def test_el_rango_incluye_el_dia_de_hoy_entero(self, client, auth_admin, producto, sin_iva):
+        """Con `hasta` mal implementado, lo de hoy quedaba afuera del reporte."""
+        self._con_movimientos(client, auth_admin, producto, sin_iva)
+        hoy = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        movimientos = client.get(f"/stock/movimientos?desde={hoy}&hasta={hoy}", headers=auth_admin).json()
+        assert len(movimientos) == 3
+
+    def test_una_fecha_anterior_no_trae_nada(self, client, auth_admin, producto, sin_iva):
+        self._con_movimientos(client, auth_admin, producto, sin_iva)
+        assert client.get("/stock/movimientos?hasta=2020-01-01", headers=auth_admin).json() == []
+
+    def test_rechaza_una_fecha_con_formato_raro(self, client, auth_admin):
+        assert client.get("/stock/movimientos?desde=ayer", headers=auth_admin).status_code == 400
 
 
 class TestArqueoDeCaja:

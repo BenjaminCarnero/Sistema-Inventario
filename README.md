@@ -21,7 +21,8 @@ campo de código y con Enter se encadena toda la venta.
 
 **Backoffice**
 - Catálogo con imágenes, categorías, búsqueda, filtros y etiquetas de código de barras
-- Entrada de mercadería y ajuste por recuento físico, con historial de quién y por qué
+- Entrada de mercadería y ajuste por recuento físico
+- Registro completo de movimientos de stock: quién, cuándo y por qué, exportable a Excel
 - Devoluciones parciales y anulación de ventas: reponen el stock y descuentan de la caja
 - Alertas de stock bajo
 - Reportes: recaudación diaria, productos más vendidos, rentabilidad y arqueos de caja
@@ -163,8 +164,13 @@ En **Admin › Catálogo**, el botón junto a cada producto abre dos operaciones
 - **Recuento físico**: el stock queda en lo que contaste, y el sistema guarda la
   diferencia contra lo que decía. Sirve después de un inventario.
 
-Las dos quedan registradas con el usuario, la fecha y el motivo, y se ven en el
-historial del mismo producto. Las salidas no se cargan a mano: las genera la venta.
+Las dos quedan registradas con el usuario, la fecha y el motivo. Las salidas no
+se cargan a mano: las genera la venta.
+
+El registro completo está en **Admin › Movimientos de Stock**: todo lo que entró
+y salió del depósito, filtrable por producto, por tipo y por rango de fechas, y
+exportable a Excel. Es lo que se mira para auditar el inventario cuando los
+números no cierran.
 
 ### Devolver o anular una venta
 

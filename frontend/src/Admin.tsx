@@ -16,6 +16,21 @@ import { useConfig } from './components/ConfigProvider';
 import { useCameraAvailability } from './useCamera';
 import { sincronizarCatalogo, paraCatalogoLocal } from './catalogoLocal';
 
+/** Etiqueta de color según el tipo de movimiento de stock. */
+function EtiquetaMovimiento({ tipo }: { tipo: string }) {
+  const estilos: Record<string, [string, string]> = {
+    INGRESO: ['bg-status-success/15 text-status-success', 'Entrada'],
+    EGRESO: ['bg-status-error/15 text-status-error', 'Salida'],
+    AJUSTE: ['bg-status-warning/15 text-status-warning', 'Ajuste'],
+  };
+  const [clase, etiqueta] = estilos[tipo] || ['bg-white/10 text-text-secondary', tipo];
+  return (
+    <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${clase}`}>
+      {etiqueta}
+    </span>
+  );
+}
+
 function getUserRole() {
   const token = localStorage.getItem('token');
   if (!token) return null;
@@ -110,6 +125,15 @@ function Admin() {
   const [movimiento, setMovimiento] = useState(MOVIMIENTO_VACIO);
   const [historialStock, setHistorialStock] = useState<any[]>([]);
   const [guardandoMovimiento, setGuardandoMovimiento] = useState(false);
+
+  // Registro completo de movimientos de stock (sección propia)
+  const [movimientos, setMovimientos] = useState<any[]>([]);
+  const [loadingMovimientos, setLoadingMovimientos] = useState(true);
+  const [filtroMovProducto, setFiltroMovProducto] = useState<number | ''>('');
+  const [filtroMovTipo, setFiltroMovTipo] = useState<'' | 'INGRESO' | 'EGRESO' | 'AJUSTE'>('');
+  const [movDesde, setMovDesde] = useState('');
+  const [movHasta, setMovHasta] = useState('');
+  const [exportandoMov, setExportandoMov] = useState(false);
 
   // Devoluciones: venta que se está devolviendo o anulando
   const [ventaDevolucion, setVentaDevolucion] = useState<any>(null);
@@ -213,6 +237,8 @@ function Admin() {
       } else if (activeTab === 'reportes') {
         setLoadingReportes(true);
         api.getHistorialCajas().then(setHistorialCajas).catch(console.error).finally(() => setLoadingReportes(false));
+      } else if (activeTab === 'stock') {
+        cargarMovimientos();
       } else if (activeTab === 'descuentos') {
         cargarDescuentos();
       } else if (activeTab === 'configuracion' && getUserRole() === 1) {
@@ -249,6 +275,41 @@ function Admin() {
 
   const cargarCategorias = () => {
     api.getCategorias().then(setCategorias).catch(console.error);
+  };
+
+  const cargarMovimientos = () => {
+    setLoadingMovimientos(true);
+    api.getMovimientosStock(filtroMovProducto || undefined, 500, {
+      tipo: filtroMovTipo || undefined,
+      desde: movDesde || undefined,
+      hasta: movHasta || undefined,
+    })
+      .then(setMovimientos)
+      .catch(err => showToast(err.message, 'error'))
+      .finally(() => setLoadingMovimientos(false));
+  };
+
+  // Los filtros recargan desde el servidor y no en memoria: el historial
+  // completo puede ser mucho más largo que lo que se trae de una.
+  useEffect(() => {
+    if (isAuthenticated && activeTab === 'stock') cargarMovimientos();
+  }, [filtroMovProducto, filtroMovTipo, movDesde, movHasta]);
+
+  const handleExportarMovimientos = async () => {
+    if (movimientos.length === 0) {
+      showToast('No hay movimientos para exportar con estos filtros', 'error');
+      return;
+    }
+    setExportandoMov(true);
+    try {
+      const { exportarMovimientosExcel } = await import('./exportExcel');
+      await exportarMovimientosExcel(movimientos, movDesde || 'inicio', movHasta || hoyISO);
+      showToast('Excel descargado', 'success');
+    } catch (err: any) {
+      showToast('No se pudo exportar: ' + err.message, 'error');
+    } finally {
+      setExportandoMov(false);
+    }
   };
 
   const cargarDescuentos = () => {
@@ -587,6 +648,7 @@ function Admin() {
         'success'
       );
       setMovimientoProd(null);
+      if (activeTab === 'stock') cargarMovimientos();
     } catch (err: any) {
       showToast(err.message, 'error');
     } finally {
@@ -721,6 +783,14 @@ function Admin() {
           )}
           {userRole !== 3 && (
             <button
+              onClick={() => setActiveTab('stock')}
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-l-2 ${activeTab === 'stock' ? 'bg-brand/15 text-brand-light border-l-brand' : 'hover:bg-white/5 text-text-secondary border-l-transparent'}`}
+            >
+              <PackagePlus size={20} /> Movimientos de Stock
+            </button>
+          )}
+          {userRole !== 3 && (
+            <button
               onClick={() => setActiveTab('reportes')}
               className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-l-2 ${activeTab === 'reportes' ? 'bg-brand/15 text-brand-light border-l-brand' : 'hover:bg-white/5 text-text-secondary border-l-transparent'}`}
             >
@@ -775,6 +845,12 @@ function Admin() {
           </button>
         )}
         {userRole !== 3 && (
+          <button onClick={() => setActiveTab('stock')} className={`p-2 rounded-lg flex flex-col items-center gap-1 ${activeTab === 'stock' ? 'text-brand-light' : 'text-text-secondary'}`}>
+            <PackagePlus size={24} />
+            <span className="text-[10px]">Stock</span>
+          </button>
+        )}
+        {userRole !== 3 && (
           <button onClick={() => setActiveTab('reportes')} className={`p-2 rounded-lg flex flex-col items-center gap-1 ${activeTab === 'reportes' ? 'text-brand-light' : 'text-text-secondary'}`}>
             <PieChart size={24} />
             <span className="text-[10px]">Reportes</span>
@@ -803,6 +879,7 @@ function Admin() {
             {activeTab === 'dashboard' && 'Resumen General (En Vivo)'}
             {activeTab === 'productos' && 'Gestión de Catálogo (Real)'}
             {activeTab === 'descuentos' && 'Descuentos y Promociones'}
+            {activeTab === 'stock' && 'Movimientos de Stock'}
             {activeTab === 'reportes' && 'Auditoría y Reportes de Caja'}
             {activeTab === 'configuracion' && 'Configuración del Sistema'}
           </h2>
@@ -1762,6 +1839,163 @@ function Admin() {
                 </div>
               )}
             </AnimatePresence>
+          </motion.div>
+        )}
+
+        {activeTab === 'stock' && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+            <div className="glass-card p-6">
+              <div className="flex flex-wrap justify-between items-start gap-3 mb-1">
+                <h3 className="text-xl font-semibold">Todo lo que entró y salió del depósito</h3>
+                <button
+                  onClick={handleExportarMovimientos}
+                  disabled={exportandoMov}
+                  className="bg-status-success hover:bg-green-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-semibold"
+                >
+                  <FileSpreadsheet size={16} /> {exportandoMov ? 'Generando…' : 'Exportar a Excel'}
+                </button>
+              </div>
+              <p className="text-sm text-text-muted mb-5">
+                Cada venta descuenta stock y deja su salida. Las entradas y los ajustes
+                se cargan desde el catálogo, con el botón de cada producto.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+                <div>
+                  <label className="block text-xs text-text-secondary mb-1">Producto</label>
+                  <select
+                    className="glass-input w-full p-2 rounded-md text-sm"
+                    value={filtroMovProducto}
+                    onChange={e => setFiltroMovProducto(e.target.value === '' ? '' : Number(e.target.value))}
+                  >
+                    <option value="">Todos</option>
+                    {[...localProductos].sort((a, b) => a.nombre.localeCompare(b.nombre)).map(p => (
+                      <option key={p.id} value={p.id}>{p.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-text-secondary mb-1">Tipo</label>
+                  <select
+                    className="glass-input w-full p-2 rounded-md text-sm"
+                    value={filtroMovTipo}
+                    onChange={e => setFiltroMovTipo(e.target.value as any)}
+                  >
+                    <option value="">Todos</option>
+                    <option value="INGRESO">Entradas</option>
+                    <option value="EGRESO">Salidas por venta</option>
+                    <option value="AJUSTE">Ajustes por recuento</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-text-secondary mb-1">Desde</label>
+                  <input type="date" className="glass-input w-full p-2 rounded-md text-sm" value={movDesde} onChange={e => setMovDesde(e.target.value)} />
+                </div>
+                <div>
+                  <label className="block text-xs text-text-secondary mb-1">Hasta</label>
+                  <input type="date" className="glass-input w-full p-2 rounded-md text-sm" value={movHasta} onChange={e => setMovHasta(e.target.value)} />
+                </div>
+              </div>
+
+              {(filtroMovProducto || filtroMovTipo || movDesde || movHasta) && (
+                <button
+                  onClick={() => { setFiltroMovProducto(''); setFiltroMovTipo(''); setMovDesde(''); setMovHasta(''); }}
+                  className="text-xs text-text-secondary hover:text-white underline mb-4"
+                >
+                  Quitar los filtros
+                </button>
+              )}
+
+              {loadingMovimientos ? (
+                <div className="space-y-2">
+                  {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}
+                </div>
+              ) : movimientos.length === 0 ? (
+                <EmptyState
+                  icon={PackagePlus}
+                  title="No hay movimientos"
+                  description={filtroMovProducto || filtroMovTipo || movDesde || movHasta
+                    ? 'Probá con otros filtros.'
+                    : 'Todavía no se registró ningún movimiento de stock.'}
+                />
+              ) : (
+                <>
+                  <div className="flex flex-wrap gap-4 text-xs text-text-muted mb-3">
+                    <span>{movimientos.length} movimiento{movimientos.length > 1 ? 's' : ''}</span>
+                    <span className="text-status-success">
+                      Entradas: +{movimientos.filter(m => m.tipo_movimiento === 'INGRESO').reduce((s, m) => s + m.cantidad, 0)}
+                    </span>
+                    <span className="text-status-error">
+                      Salidas: -{movimientos.filter(m => m.tipo_movimiento === 'EGRESO').reduce((s, m) => s + m.cantidad, 0)}
+                    </span>
+                    <span className="text-status-warning">
+                      Ajustes: {movimientos.filter(m => m.tipo_movimiento === 'AJUSTE').length}
+                    </span>
+                  </div>
+
+                  {/* Vista tabla (desktop) */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="border-b border-border-subtle text-text-secondary text-sm">
+                          <th className="pb-3 pr-4 font-medium">Fecha</th>
+                          <th className="pb-3 pr-4 font-medium">Producto</th>
+                          <th className="pb-3 pr-4 font-medium">Tipo</th>
+                          <th className="pb-3 pr-6 font-medium text-right">Cantidad</th>
+                          <th className="pb-3 pr-4 font-medium">Usuario</th>
+                          <th className="pb-3 font-medium">Motivo</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-sm">
+                        {movimientos.map(m => (
+                          <tr key={m.id} className="border-b border-border-subtle/50 hover:bg-white/[0.02] transition-colors">
+                            <td className="py-3 pr-4 text-text-muted whitespace-nowrap">{new Date(m.fecha_hora).toLocaleString()}</td>
+                            <td className="py-3 pr-4 font-medium">{m.producto_nombre}</td>
+                            <td className="py-3 pr-4">
+                              <EtiquetaMovimiento tipo={m.tipo_movimiento} />
+                            </td>
+                            <td className={`py-3 pr-6 text-right font-semibold ${
+                              m.tipo_movimiento === 'EGRESO' ? 'text-status-error'
+                              : m.tipo_movimiento === 'AJUSTE' ? 'text-status-warning'
+                              : 'text-status-success'
+                            }`}>
+                              {m.tipo_movimiento === 'EGRESO' ? '-' : m.tipo_movimiento === 'INGRESO' ? '+' : '±'}{m.cantidad}
+                            </td>
+                            <td className="py-3 pr-4 text-text-secondary whitespace-nowrap">{m.usuario_nombre}</td>
+                            <td className="py-3 text-text-muted max-w-xs truncate" title={m.motivo || ''}>{m.motivo || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Vista tarjetas (móvil) */}
+                  <div className="md:hidden space-y-3">
+                    {movimientos.map(m => (
+                      <div key={m.id} className="glass rounded-xl p-4">
+                        <div className="flex justify-between items-start gap-3 mb-2">
+                          <p className="font-semibold min-w-0 truncate">{m.producto_nombre}</p>
+                          <span className={`shrink-0 font-bold ${
+                            m.tipo_movimiento === 'EGRESO' ? 'text-status-error'
+                            : m.tipo_movimiento === 'AJUSTE' ? 'text-status-warning'
+                            : 'text-status-success'
+                          }`}>
+                            {m.tipo_movimiento === 'EGRESO' ? '-' : m.tipo_movimiento === 'INGRESO' ? '+' : '±'}{m.cantidad}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <EtiquetaMovimiento tipo={m.tipo_movimiento} />
+                          <span className="text-xs text-text-muted">{new Date(m.fecha_hora).toLocaleString()}</span>
+                        </div>
+                        <p className="text-xs text-text-secondary">
+                          {m.usuario_nombre}{m.motivo && ` · ${m.motivo}`}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </motion.div>
         )}
 
