@@ -199,8 +199,9 @@ class ProductoDevolvible(BaseModel):
 
 class MovimientoStockCreate(BaseModel):
     producto_id: int
-    # Positiva para INGRESO; para AJUSTE es el stock que contaste
-    cantidad: int = Field(gt=0, le=1_000_000)
+    # Positiva para INGRESO; para AJUSTE es el stock que contaste, y contar
+    # cero es un resultado válido (se agotó y el sistema no se enteró).
+    cantidad: int = Field(ge=0, le=1_000_000)
     tipo_movimiento: str  # INGRESO o AJUSTE
     motivo: Optional[str] = Field(default=None, max_length=255)
 

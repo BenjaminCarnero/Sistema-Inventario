@@ -64,6 +64,15 @@ function POS() {
 
   // Catálogo y descuentos
   const [busquedaCatalogo, setBusquedaCatalogo] = useState('');
+  const [categoriaActiva, setCategoriaActiva] = useState<number | null>(null);
+  const [categorias, setCategorias] = useState<any[]>(() => {
+    // Se arranca con lo último que se bajó: sin conexión el filtro igual anda
+    try {
+      return JSON.parse(localStorage.getItem('categorias_cache') || '[]');
+    } catch {
+      return [];
+    }
+  });
   const [descuentos, setDescuentos] = useState<any[]>([]);
   const [descuentoAplicado, setDescuentoAplicado] = useState<any>(null);
 
@@ -75,12 +84,18 @@ function POS() {
   const lastScannedRef = useRef<{ code: string, time: number } | null>(null);
   const codigoInputRef = useRef<HTMLInputElement>(null);
 
-  const productosFiltrados = busquedaCatalogo
-    ? localProductos.filter(p =>
-        p.nombre.toLowerCase().includes(busquedaCatalogo.toLowerCase()) ||
-        p.codigo_barras.includes(busquedaCatalogo)
-      )
-    : localProductos;
+  const productosFiltrados = localProductos.filter(p => {
+    if (categoriaActiva !== null && p.categoria_id !== categoriaActiva) return false;
+    if (!busquedaCatalogo) return true;
+    return p.nombre.toLowerCase().includes(busquedaCatalogo.toLowerCase())
+      || p.codigo_barras.includes(busquedaCatalogo);
+  });
+
+  // Sólo se ofrecen las categorías que tienen algo cargado: un filtro que
+  // siempre da vacío es ruido en una pantalla de venta.
+  const categoriasConProductos = categorias.filter(
+    c => localProductos.some(p => p.categoria_id === c.id)
+  );
 
   // Mercado Pago necesita hablar con el servidor para generar el QR y
   // confirmar el pago: sin conexión no se ofrece en lugar de fallar al tocarlo.
@@ -152,6 +167,14 @@ function POS() {
         .finally(() => setLoadingCaja(false));
       // Descuentos vigentes disponibles para aplicar en el cobro
       api.getDescuentos(true).then(setDescuentos).catch(() => setDescuentos([]));
+      // Las categorías se guardan en el equipo: si después se corta internet,
+      // los filtros del catálogo siguen funcionando.
+      api.getCategorias()
+        .then((cats: any[]) => {
+          setCategorias(cats);
+          localStorage.setItem('categorias_cache', JSON.stringify(cats));
+        })
+        .catch(() => {});
     } else {
       setLoadingCaja(false);
     }
@@ -929,6 +952,29 @@ function POS() {
                 />
               </div>
             </div>
+            {categoriasConProductos.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-4">
+                <button
+                  onClick={() => setCategoriaActiva(null)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                    categoriaActiva === null ? 'bg-brand text-white' : 'bg-white/5 text-text-secondary hover:bg-white/10'
+                  }`}
+                >
+                  Todo
+                </button>
+                {categoriasConProductos.map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => setCategoriaActiva(categoriaActiva === c.id ? null : c.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                      categoriaActiva === c.id ? 'bg-brand text-white' : 'bg-white/5 text-text-secondary hover:bg-white/10'
+                    }`}
+                  >
+                    {c.nombre}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 overflow-y-auto max-h-[400px] pr-2 custom-scrollbar">
               {productosFiltrados.map(p => (
                 <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} key={p.id} onClick={() => addToCart(p)} className="glass cursor-pointer rounded-xl p-3 flex flex-col justify-between transition-colors group hover:border-brand/50">

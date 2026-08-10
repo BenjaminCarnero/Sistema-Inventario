@@ -60,6 +60,21 @@ class TestAjustePorRecuento:
         assert movimiento.cantidad == 20  # faltaban 20
         assert "100" in movimiento.motivo and "80" in movimiento.motivo
 
+    def test_contar_cero_es_valido(self, client, auth_admin, producto, db):
+        """Se agotó y el sistema no se enteró: hay que poder dejarlo en cero."""
+        r = client.post("/stock/movimientos", headers=auth_admin, json={
+            "producto_id": producto.id, "cantidad": 0, "tipo_movimiento": "AJUSTE",
+        })
+        assert r.status_code == 201
+        db.refresh(producto)
+        assert producto.stock_actual == 0
+
+    def test_un_ingreso_de_cero_no_tiene_sentido(self, client, auth_admin, producto):
+        r = client.post("/stock/movimientos", headers=auth_admin, json={
+            "producto_id": producto.id, "cantidad": 0, "tipo_movimiento": "INGRESO",
+        })
+        assert r.status_code == 400
+
     def test_el_ajuste_tambien_puede_sumar(self, client, auth_admin, producto, db):
         client.post("/stock/movimientos", headers=auth_admin, json={
             "producto_id": producto.id, "cantidad": 120, "tipo_movimiento": "AJUSTE",
@@ -142,3 +157,19 @@ class TestCategorias:
 
     def test_el_cajero_puede_leerlas_para_filtrar_el_catalogo(self, client, auth_cajero, admin):
         assert client.get("/categorias/", headers=auth_cajero).status_code == 200
+
+    def test_no_se_asigna_una_categoria_que_no_existe(self, client, auth_admin):
+        """SQLite no fuerza las claves foráneas: hay que chequearlo a mano."""
+        r = client.post("/productos/", headers=auth_admin, json={
+            "codigo_barras": "999", "nombre": "x", "precio_venta": 1, "costo": 1,
+            "stock_actual": 1, "categoria_id": 4321,
+        })
+        assert r.status_code == 400
+
+    def test_el_producto_guarda_su_categoria(self, client, auth_admin, producto, db):
+        categoria = client.post("/categorias/", headers=auth_admin, json={"nombre": "Limpieza"}).json()
+        r = client.put(f"/productos/{producto.id}", headers=auth_admin, json={
+            "categoria_id": categoria["id"],
+        })
+        assert r.status_code == 200
+        assert r.json()["categoria_id"] == categoria["id"]

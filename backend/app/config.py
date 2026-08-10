@@ -1,8 +1,14 @@
 import secrets
 import sys
+from pathlib import Path
 from typing import List
 
 from pydantic_settings import BaseSettings
+
+# Carpeta `backend/`. Todo lo que es del proyecto (el .env, la base SQLite) se
+# ubica a partir de acá y no del directorio desde donde se ejecutó el comando:
+# arrancar uvicorn desde la raíz del repo creaba una base vacía aparte.
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Clave que en versiones viejas venía escrita en el código. Se deja en una
 # lista negra para avisar si alguien la arrastra en su .env: al haber estado
@@ -36,10 +42,29 @@ class Settings(BaseSettings):
     ENTORNO: str = "desarrollo"  # "produccion" activa los chequeos estrictos
 
     class Config:
-        env_file = ".env"
+        env_file = str(BASE_DIR / ".env")
 
 
 settings = Settings()
+
+
+def _sqlite_absoluta(url: str) -> str:
+    """Ancla una ruta SQLite relativa a `backend/`.
+
+    Con `sqlite:///./applify.db` la base sale de donde se haya ejecutado el
+    comando. Levantar el servidor desde otra carpeta abría una base nueva y
+    vacía, con el catálogo y las ventas aparentemente perdidos.
+    """
+    prefijo = "sqlite:///"
+    if not url.startswith(prefijo):
+        return url
+    ruta = url[len(prefijo):]
+    if not ruta or ruta == ":memory:" or Path(ruta).is_absolute():
+        return url
+    return f"{prefijo}{(BASE_DIR / ruta).resolve()}"
+
+
+settings.DATABASE_URL = _sqlite_absoluta(settings.DATABASE_URL)
 
 
 def _avisar(mensaje: str, critico: bool = False):

@@ -6,8 +6,16 @@ from app import models, schemas, database, dependencies
 router = APIRouter(prefix="/productos", tags=["productos"])
 
 
-def _validar_producto(datos: dict):
+def _validar_producto(datos: dict, db: Session = None):
     """Chequeos de negocio y de seguridad comunes al alta y la edición."""
+    # SQLite no fuerza las claves foráneas por defecto: sin este chequeo, un
+    # producto podía quedar apuntando a una categoría que no existe.
+    categoria_id = datos.get("categoria_id")
+    if categoria_id is not None and db is not None:
+        existe = db.query(models.Categoria).filter(models.Categoria.id == categoria_id).first()
+        if not existe:
+            raise HTTPException(status_code=400, detail="La categoría indicada no existe")
+
     imagen = datos.get("imagen_url")
     if imagen:
         imagen = str(imagen).strip()
@@ -56,7 +64,7 @@ def create_producto(
         dependencies.require_role([models.RolEnum.ADMIN.value, models.RolEnum.ENCARGADO.value])
     ),
 ):
-    _validar_producto(producto.model_dump())
+    _validar_producto(producto.model_dump(), db)
 
     db_producto = db.query(models.Producto).filter(
         models.Producto.codigo_barras == producto.codigo_barras
@@ -85,7 +93,7 @@ def update_producto(
         raise HTTPException(status_code=404, detail="Producto not found")
 
     update_data = producto_update.model_dump(exclude_unset=True)
-    _validar_producto(update_data)
+    _validar_producto(update_data, db)
 
     # Cambiar el código de barras no puede pisar el de otro producto
     nuevo_codigo = update_data.get("codigo_barras")

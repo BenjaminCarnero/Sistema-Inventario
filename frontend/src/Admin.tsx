@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Package, LayoutDashboard, Settings, LogOut, Plus, CloudDownload, ScanLine, Edit2, PieChart, Printer, Search, Users, X, CameraOff, Image as ImageIcon, Tag, AlertTriangle, FileSpreadsheet, TrendingUp } from 'lucide-react';
+import { Package, LayoutDashboard, Settings, LogOut, Plus, CloudDownload, ScanLine, Edit2, PieChart, Printer, Search, Users, X, CameraOff, Image as ImageIcon, Tag, AlertTriangle, FileSpreadsheet, TrendingUp, Undo2, PackagePlus, FolderTree } from 'lucide-react';
 import Barcode from 'react-barcode';
 import { Html5QrcodeScanner, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -54,7 +54,8 @@ function Admin() {
   // New/Edit Product Form States
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [newProd, setNewProd] = useState({ codigo_barras: '', nombre: '', precio_venta: 0, costo: 0, stock_actual: 0, imagen_url: '' });
+  const PRODUCTO_VACIO = { codigo_barras: '', nombre: '', precio_venta: 0, costo: 0, stock_actual: 0, imagen_url: '', categoria_id: '' as number | '' };
+  const [newProd, setNewProd] = useState(PRODUCTO_VACIO);
   const [showScanner, setShowScanner] = useState(false);
   const cameraStatus = useCameraAvailability();
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
@@ -93,8 +94,31 @@ function Admin() {
   const [rangoHasta, setRangoHasta] = useState(hoyISO);
   const [exportando, setExportando] = useState(false);
 
-  // Orden del catálogo
+  // Orden y filtros del catálogo
   const [ordenProductos, setOrdenProductos] = useState<'nombre' | 'stock' | 'precio'>('nombre');
+  const [filtroCategoria, setFiltroCategoria] = useState<number | 'todas' | 'sin'>('todas');
+
+  // Categorías
+  const [categorias, setCategorias] = useState<any[]>([]);
+  const [mostrarCategorias, setMostrarCategorias] = useState(false);
+  const [nuevaCategoria, setNuevaCategoria] = useState('');
+  const [editandoCategoria, setEditandoCategoria] = useState<{ id: number, nombre: string } | null>(null);
+
+  // Entrada de mercadería: producto sobre el que se está cargando stock
+  const [movimientoProd, setMovimientoProd] = useState<any>(null);
+  const MOVIMIENTO_VACIO = { tipo_movimiento: 'INGRESO' as 'INGRESO' | 'AJUSTE', cantidad: 0, motivo: '' };
+  const [movimiento, setMovimiento] = useState(MOVIMIENTO_VACIO);
+  const [historialStock, setHistorialStock] = useState<any[]>([]);
+  const [guardandoMovimiento, setGuardandoMovimiento] = useState(false);
+
+  // Devoluciones: venta que se está devolviendo o anulando
+  const [ventaDevolucion, setVentaDevolucion] = useState<any>(null);
+  const [devolvible, setDevolvible] = useState<any[]>([]);
+  const [cantidadesDevolver, setCantidadesDevolver] = useState<Record<number, number>>({});
+  const [motivoDevolucion, setMotivoDevolucion] = useState('');
+  const [metodoDevolucion, setMetodoDevolucion] = useState('EFECTIVO');
+  const [devolucionesPrevias, setDevolucionesPrevias] = useState<any[]>([]);
+  const [procesandoDevolucion, setProcesandoDevolucion] = useState(false);
 
   // Sub-pestaña dentro de Configuración
   const [subTabConfig, setSubTabConfig] = useState<'sistema' | 'usuarios'>('sistema');
@@ -216,6 +240,17 @@ function Admin() {
       .catch(console.error);
   }, [isAuthenticated, umbralStock, userRole]);
 
+  // Las categorías se usan en el formulario de producto y en el filtro del
+  // catálogo, así que se cargan una vez al entrar y no por pestaña.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    cargarCategorias();
+  }, [isAuthenticated]);
+
+  const cargarCategorias = () => {
+    api.getCategorias().then(setCategorias).catch(console.error);
+  };
+
   const cargarDescuentos = () => {
     setLoadingDescuentos(true);
     api.getDescuentos().then(setDescuentos).catch(console.error).finally(() => setLoadingDescuentos(false));
@@ -234,6 +269,8 @@ function Admin() {
       const termino = searchTerm.trim().toLowerCase();
       if (termino && !p.nombre.toLowerCase().includes(termino) && !p.codigo_barras.includes(termino)) return false;
       if (lowStockFilter && p.stock_actual >= umbralStock) return false;
+      if (filtroCategoria === 'sin' && p.categoria_id) return false;
+      if (typeof filtroCategoria === 'number' && p.categoria_id !== filtroCategoria) return false;
       return true;
     })
     .sort((a, b) => {
@@ -376,8 +413,13 @@ function Admin() {
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      // Enviamos null en vez de string vacío para que la imagen quede sin definir
-      const payload = { ...newProd, imagen_url: newProd.imagen_url?.trim() || null };
+      // Enviamos null en vez de string vacío para que la imagen y la categoría
+      // queden sin definir en lugar de guardarse como texto vacío
+      const payload = {
+        ...newProd,
+        imagen_url: newProd.imagen_url?.trim() || null,
+        categoria_id: newProd.categoria_id === '' ? null : Number(newProd.categoria_id),
+      };
 
       let guardado;
       if (editingId) {
@@ -391,7 +433,7 @@ function Admin() {
 
       setShowAddForm(false);
       setEditingId(null);
-      setNewProd({ codigo_barras: '', nombre: '', precio_venta: 0, costo: 0, stock_actual: 0, imagen_url: '' });
+      setNewProd(PRODUCTO_VACIO);
       showToast(editingId ? 'Producto actualizado correctamente' : 'Producto creado correctamente', 'success');
     } catch (err: any) {
       showToast("Error al guardar el producto: " + err.message, 'error');
@@ -455,11 +497,167 @@ function Admin() {
       precio_venta: completo.precio_venta,
       costo: completo.costo ?? 0,
       stock_actual: completo.stock_actual,
-      imagen_url: completo.imagen_url || ''
+      imagen_url: completo.imagen_url || '',
+      categoria_id: completo.categoria_id ?? '',
     });
     setEditingId(p.id);
     setShowAddForm(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // --- Categorías -----------------------------------------------------------
+
+  const handleGuardarCategoria = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const nombre = (editandoCategoria ? editandoCategoria.nombre : nuevaCategoria).trim();
+    if (!nombre) return;
+    try {
+      if (editandoCategoria) {
+        await api.updateCategoria(editandoCategoria.id, nombre);
+        showToast('Categoría actualizada', 'success');
+      } else {
+        await api.createCategoria(nombre);
+        showToast('Categoría creada', 'success');
+      }
+      setEditandoCategoria(null);
+      setNuevaCategoria('');
+      cargarCategorias();
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  const handleEliminarCategoria = async (c: any) => {
+    const enUso = localProductos.filter(p => p.categoria_id === c.id).length;
+    const ok = await confirm({
+      title: 'Eliminar categoría',
+      message: enUso
+        ? `${enUso} producto${enUso > 1 ? 's quedan' : ' queda'} sin categoría. Los productos no se borran.`
+        : `¿Eliminar la categoría "${c.nombre}"?`,
+      confirmText: 'Eliminar',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.deleteCategoria(c.id);
+      cargarCategorias();
+      syncCatalog();
+      showToast('Categoría eliminada', 'success');
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  // --- Entrada de mercadería ------------------------------------------------
+
+  const abrirMovimiento = async (p: any) => {
+    setMovimientoProd(p);
+    setMovimiento({ ...MOVIMIENTO_VACIO, cantidad: 0 });
+    setHistorialStock([]);
+    try {
+      setHistorialStock(await api.getMovimientosStock(p.id, 15));
+    } catch (err: any) {
+      console.error(err);
+    }
+  };
+
+  const handleGuardarMovimiento = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!movimientoProd) return;
+    if (movimiento.tipo_movimiento === 'INGRESO' && movimiento.cantidad <= 0) {
+      showToast('La cantidad que ingresa tiene que ser mayor a cero', 'error');
+      return;
+    }
+    setGuardandoMovimiento(true);
+    try {
+      await api.registrarMovimientoStock({
+        producto_id: movimientoProd.id,
+        cantidad: Math.trunc(movimiento.cantidad),
+        tipo_movimiento: movimiento.tipo_movimiento,
+        motivo: movimiento.motivo.trim() || undefined,
+      });
+      // El stock lo recalcula el servidor: se vuelve a bajar el catálogo en
+      // vez de sumar a mano, así el número que se ve es el real.
+      await syncCatalog();
+      api.getStockBajo(umbralStock).then(setStockBajo).catch(console.error);
+      showToast(
+        movimiento.tipo_movimiento === 'INGRESO'
+          ? `Entraron ${movimiento.cantidad} unidades de ${movimientoProd.nombre}`
+          : `Stock de ${movimientoProd.nombre} ajustado a ${movimiento.cantidad}`,
+        'success'
+      );
+      setMovimientoProd(null);
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    } finally {
+      setGuardandoMovimiento(false);
+    }
+  };
+
+  // --- Devoluciones y anulaciones -------------------------------------------
+
+  const abrirDevolucion = async (venta: any) => {
+    setVentaDevolucion(venta);
+    setCantidadesDevolver({});
+    setMotivoDevolucion('');
+    setMetodoDevolucion(venta.metodo_pago === 'EFECTIVO' ? 'EFECTIVO' : venta.metodo_pago);
+    setDevolvible([]);
+    setDevolucionesPrevias([]);
+    try {
+      const [disponible, previas] = await Promise.all([
+        api.getDevolvible(venta.id),
+        api.getDevoluciones(venta.id),
+      ]);
+      setDevolvible(disponible);
+      setDevolucionesPrevias(previas);
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  /** Sin `detalles` el backend anula la venta entera. */
+  const ejecutarDevolucion = async (anular: boolean) => {
+    if (!ventaDevolucion) return;
+
+    const detalles = anular ? [] : Object.entries(cantidadesDevolver)
+      .map(([producto_id, cantidad]) => ({ producto_id: Number(producto_id), cantidad }))
+      .filter(d => d.cantidad > 0);
+
+    if (!anular && detalles.length === 0) {
+      showToast('Elegí al menos un producto para devolver', 'error');
+      return;
+    }
+
+    const ok = await confirm({
+      title: anular ? 'Anular la venta entera' : 'Registrar la devolución',
+      message: anular
+        ? `Se devuelve todo lo que queda de la venta #${ventaDevolucion.id}, vuelve al stock y sale de la caja. La venta queda registrada como anulada.`
+        : 'Los productos vuelven al stock y el importe sale de la caja del turno.',
+      confirmText: anular ? 'Anular' : 'Devolver',
+      danger: true,
+    });
+    if (!ok) return;
+
+    setProcesandoDevolucion(true);
+    try {
+      const resultado = await api.crearDevolucion(ventaDevolucion.id, {
+        motivo: motivoDevolucion.trim() || undefined,
+        metodo_devolucion: metodoDevolucion,
+        detalles,
+      });
+      showToast(`Devolución registrada por ${money(resultado.total_devuelto)}`, 'success');
+      setVentaDevolucion(null);
+      await syncCatalog();
+      // El detalle de la caja tiene que mostrar el estado nuevo de la venta
+      if (selectedCaja) {
+        api.getVentasCaja(selectedCaja.id).then(setVentasCaja).catch(console.error);
+      }
+      api.getStockBajo(umbralStock).then(setStockBajo).catch(console.error);
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    } finally {
+      setProcesandoDevolucion(false);
+    }
   };
 
   if (!isAuthenticated) {
@@ -896,10 +1094,18 @@ function Admin() {
                     ) : (
                       <div className="space-y-4">
                         {ventasCaja.map((v) => (
-                          <div key={v.id} className="bg-white/5 p-4 rounded-lg border border-white/10">
-                            <div className="flex justify-between items-center border-b border-white/10 pb-2 mb-2">
-                              <span className="font-semibold text-brand-light">Venta #{v.id}</span>
-                              <span className="text-xs text-text-muted">{new Date(v.fecha_hora).toLocaleTimeString()}</span>
+                          <div key={v.id} className={`bg-white/5 p-4 rounded-lg border ${v.estado === 'ANULADA' ? 'border-status-error/40' : 'border-white/10'}`}>
+                            <div className="flex justify-between items-center border-b border-white/10 pb-2 mb-2 gap-2">
+                              <span className="font-semibold text-brand-light flex items-center gap-2 min-w-0">
+                                <span className={v.estado === 'ANULADA' ? 'line-through opacity-60' : ''}>Venta #{v.id}</span>
+                                {v.estado === 'ANULADA' && (
+                                  <span className="bg-status-error/20 text-status-error text-[10px] font-bold px-2 py-0.5 rounded-full uppercase shrink-0">Anulada</span>
+                                )}
+                                {v.estado === 'CON_DEVOLUCION' && (
+                                  <span className="bg-status-warning/20 text-status-warning text-[10px] font-bold px-2 py-0.5 rounded-full uppercase shrink-0">Con devolución</span>
+                                )}
+                              </span>
+                              <span className="text-xs text-text-muted shrink-0">{new Date(v.fecha_hora).toLocaleTimeString()}</span>
                             </div>
                             <ul className="text-sm space-y-1.5 mb-2">
                               {v.detalles.map((d: any) => (
@@ -931,10 +1137,154 @@ function Admin() {
                                   <span>Vuelto: {money(v.vuelto ?? 0)}</span>
                                 </div>
                               )}
+                              {v.total_devuelto > 0 && (
+                                <div className="flex justify-between text-xs text-status-error mt-1">
+                                  <span>Devuelto</span>
+                                  <span className="font-semibold">-{money(v.total_devuelto)}</span>
+                                </div>
+                              )}
                             </div>
+
+                            {userRole !== 3 && v.estado !== 'ANULADA' && (
+                              <div className="flex justify-end mt-3">
+                                <button
+                                  onClick={() => abrirDevolucion(v)}
+                                  className="text-xs font-semibold text-status-error bg-status-error/10 hover:bg-status-error/20 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5"
+                                >
+                                  <Undo2 size={14} /> Anular / Devolver
+                                </button>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
+                    )}
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
+
+            {/* Devolución / anulación de una venta */}
+            <AnimatePresence>
+              {ventaDevolucion && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+                    className="glass-card p-6 max-w-lg w-full max-h-[85vh] overflow-y-auto"
+                  >
+                    <div className="flex justify-between items-start mb-1">
+                      <h3 className="text-xl font-bold">Devolver de la venta #{ventaDevolucion.id}</h3>
+                      <button onClick={() => setVentaDevolucion(null)} className="text-text-secondary hover:text-white transition-colors p-1 hover:bg-white/10 rounded-lg">
+                        <X size={20} />
+                      </button>
+                    </div>
+                    <p className="text-xs text-text-muted mb-5">
+                      La venta no se borra: queda registrada y la devolución la referencia.
+                      La mercadería vuelve al stock y el importe sale de la caja del turno.
+                    </p>
+
+                    {devolvible.length === 0 ? (
+                      <p className="text-text-muted text-center py-6">Cargando lo que se puede devolver…</p>
+                    ) : (
+                      <>
+                        <div className="space-y-2 mb-5">
+                          {devolvible.map((d: any) => (
+                            <div key={d.producto_id} className="flex items-center gap-3 bg-white/5 p-3 rounded-lg">
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium truncate">{d.producto_nombre}</p>
+                                <p className="text-xs text-text-muted">
+                                  {money(d.precio_unitario)} c/u · vendidas {d.cantidad_vendida}
+                                  {d.cantidad_devuelta > 0 && ` · ya devueltas ${d.cantidad_devuelta}`}
+                                </p>
+                              </div>
+                              {d.cantidad_disponible === 0 ? (
+                                <span className="text-xs text-text-muted shrink-0">Todo devuelto</span>
+                              ) : (
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={d.cantidad_disponible}
+                                    value={cantidadesDevolver[d.producto_id] ?? 0}
+                                    onWheel={e => e.currentTarget.blur()}
+                                    onChange={e => {
+                                      // Se acota acá también: escribiendo a mano se
+                                      // puede pasar del máximo del input
+                                      const valor = Math.max(0, Math.min(d.cantidad_disponible, Math.trunc(Number(e.target.value) || 0)));
+                                      setCantidadesDevolver(prev => ({ ...prev, [d.producto_id]: valor }));
+                                    }}
+                                    className="glass-input w-20 p-2 rounded-md text-center"
+                                  />
+                                  <span className="text-xs text-text-muted w-10">de {d.cantidad_disponible}</span>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+                          <div>
+                            <label className="block text-xs text-text-secondary mb-1">Motivo (opcional)</label>
+                            <input
+                              className="glass-input w-full p-2 rounded-md"
+                              placeholder="Fallado, se arrepintió…"
+                              maxLength={255}
+                              value={motivoDevolucion}
+                              onChange={e => setMotivoDevolucion(e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-text-secondary mb-1">Cómo se devuelve la plata</label>
+                            <select
+                              className="glass-input w-full p-2 rounded-md"
+                              value={metodoDevolucion}
+                              onChange={e => setMetodoDevolucion(e.target.value)}
+                            >
+                              <option value="EFECTIVO">Efectivo</option>
+                              <option value="TARJETA">Tarjeta</option>
+                              <option value="TRANSFERENCIA">Transferencia</option>
+                              <option value="MERCADOPAGO">Mercado Pago</option>
+                            </select>
+                          </div>
+                        </div>
+                        <p className="text-xs text-text-muted -mt-3 mb-5">
+                          Sólo lo devuelto en efectivo descuenta del arqueo del turno.
+                        </p>
+
+                        {devolucionesPrevias.length > 0 && (
+                          <div className="mb-5 border-t border-white/10 pt-4">
+                            <p className="text-xs font-semibold text-text-secondary mb-2">Devoluciones anteriores</p>
+                            <ul className="space-y-1 text-xs text-text-muted">
+                              {devolucionesPrevias.map((d: any) => (
+                                <li key={d.id} className="flex justify-between gap-3">
+                                  <span className="truncate">
+                                    {new Date(d.fecha_hora).toLocaleString()} · {d.usuario_nombre}
+                                    {d.motivo && ` · ${d.motivo}`}
+                                  </span>
+                                  <span className="shrink-0 text-status-error">-{money(d.total_devuelto)}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          <button
+                            disabled={procesandoDevolucion}
+                            onClick={() => ejecutarDevolucion(false)}
+                            className="flex-1 bg-brand hover:bg-brand-hover disabled:opacity-50 text-white px-4 py-2.5 rounded-lg font-semibold transition-colors"
+                          >
+                            Devolver lo seleccionado
+                          </button>
+                          <button
+                            disabled={procesandoDevolucion}
+                            onClick={() => ejecutarDevolucion(true)}
+                            className="flex-1 bg-status-error/20 text-status-error hover:bg-status-error/30 disabled:opacity-50 px-4 py-2.5 rounded-lg font-semibold transition-colors"
+                          >
+                            Anular la venta entera
+                          </button>
+                        </div>
+                      </>
                     )}
                   </motion.div>
                 </div>
@@ -981,15 +1331,81 @@ function Admin() {
             )}
 
             <div className="glass-card p-6">
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex flex-wrap justify-between items-center gap-3 mb-6">
               <h3 className="text-xl font-semibold">Inventario de la Base de Datos</h3>
-              <button onClick={() => {
-                setShowAddForm(!showAddForm);
-                if (showAddForm) setEditingId(null);
-              }} className="bg-brand hover:bg-brand-hover text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2">
-                <Plus size={18} /> {showAddForm ? 'Cancelar' : 'Nuevo Producto'}
-              </button>
+              <div className="flex gap-2">
+                {userRole !== 3 && (
+                  <button
+                    onClick={() => setMostrarCategorias(!mostrarCategorias)}
+                    className="bg-white/5 hover:bg-white/10 text-text-secondary px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+                  >
+                    <FolderTree size={18} /> Categorías
+                  </button>
+                )}
+                <button onClick={() => {
+                  setShowAddForm(!showAddForm);
+                  if (showAddForm) setEditingId(null);
+                }} className="bg-brand hover:bg-brand-hover text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2">
+                  <Plus size={18} /> {showAddForm ? 'Cancelar' : 'Nuevo Producto'}
+                </button>
+              </div>
             </div>
+
+            <AnimatePresence>
+            {mostrarCategorias && userRole !== 3 && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                className="mb-8 p-4 bg-white/5 rounded-lg border border-white/10 overflow-hidden"
+              >
+                <h4 className="font-semibold mb-1">Categorías</h4>
+                <p className="text-xs text-text-muted mb-4">
+                  Sirven para agrupar el catálogo. Borrar una categoría no borra sus productos: quedan sin categoría.
+                </p>
+
+                <form onSubmit={handleGuardarCategoria} className="flex gap-2 mb-4">
+                  <input
+                    className="glass-input flex-1 p-2 rounded-md"
+                    placeholder="Nombre de la categoría"
+                    maxLength={100}
+                    value={editandoCategoria ? editandoCategoria.nombre : nuevaCategoria}
+                    onChange={e => editandoCategoria
+                      ? setEditandoCategoria({ ...editandoCategoria, nombre: e.target.value })
+                      : setNuevaCategoria(e.target.value)}
+                  />
+                  <button type="submit" className="bg-status-success text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-600 transition-colors">
+                    {editandoCategoria ? 'Guardar' : 'Agregar'}
+                  </button>
+                  {editandoCategoria && (
+                    <button type="button" onClick={() => setEditandoCategoria(null)} className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors">
+                      Cancelar
+                    </button>
+                  )}
+                </form>
+
+                {categorias.length === 0 ? (
+                  <p className="text-sm text-text-muted">Todavía no hay ninguna.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {categorias.map(c => {
+                      const cuantos = localProductos.filter(p => p.categoria_id === c.id).length;
+                      return (
+                        <div key={c.id} className="flex items-center gap-2 bg-white/5 border border-white/10 pl-3 pr-1.5 py-1.5 rounded-lg">
+                          <span className="text-sm">{c.nombre}</span>
+                          <span className="text-[10px] text-text-muted">{cuantos}</span>
+                          <button onClick={() => setEditandoCategoria({ id: c.id, nombre: c.nombre })} className="text-text-secondary hover:text-brand-light p-1 rounded" title="Renombrar">
+                            <Edit2 size={13} />
+                          </button>
+                          <button onClick={() => handleEliminarCategoria(c)} className="text-text-secondary hover:text-status-error p-1 rounded" title="Eliminar">
+                            <X size={13} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </motion.div>
+            )}
+            </AnimatePresence>
 
             <AnimatePresence>
             {showAddForm && (
@@ -1035,7 +1451,7 @@ function Admin() {
                   <input required type="number" className="glass-input w-full p-2 rounded-md" value={newProd.stock_actual} onChange={e => setNewProd({...newProd, stock_actual: Number(e.target.value)})} />
                 </div>
 
-                <div className="md:col-span-4">
+                <div className="md:col-span-3">
                   <label className="block text-xs text-text-secondary mb-1">Imagen del producto (URL)</label>
                   <input
                     type="url"
@@ -1044,6 +1460,19 @@ function Admin() {
                     value={newProd.imagen_url}
                     onChange={e => setNewProd({...newProd, imagen_url: e.target.value})}
                   />
+                </div>
+                <div>
+                  <label className="block text-xs text-text-secondary mb-1">Categoría</label>
+                  <select
+                    className="glass-input w-full p-2 rounded-md h-[42px]"
+                    value={newProd.categoria_id}
+                    onChange={e => setNewProd({ ...newProd, categoria_id: e.target.value === '' ? '' : Number(e.target.value) })}
+                  >
+                    <option value="">Sin categoría</option>
+                    {categorias.map(c => (
+                      <option key={c.id} value={c.id}>{c.nombre}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs text-text-secondary mb-1">Vista previa</label>
@@ -1081,6 +1510,22 @@ function Admin() {
                   onChange={e => setSearchTerm(e.target.value)}
                 />
               </div>
+
+              <select
+                value={filtroCategoria}
+                onChange={e => {
+                  const v = e.target.value;
+                  setFiltroCategoria(v === 'todas' || v === 'sin' ? v : Number(v));
+                }}
+                className="glass-input p-2 rounded-md text-sm"
+                title="Filtrar por categoría"
+              >
+                <option value="todas">Todas las categorías</option>
+                {categorias.map(c => (
+                  <option key={c.id} value={c.id}>{c.nombre}</option>
+                ))}
+                <option value="sin">Sin categoría</option>
+              </select>
 
               <select
                 value={ordenProductos}
@@ -1140,6 +1585,11 @@ function Admin() {
                             </span>
                           </td>
                           <td className="py-4 text-right">
+                            {userRole !== 3 && (
+                              <button onClick={() => abrirMovimiento(p)} className="text-text-secondary hover:text-status-success transition-colors p-2 bg-white/5 hover:bg-white/10 rounded-md mr-2" title="Cargar mercadería o ajustar stock">
+                                <PackagePlus size={16} />
+                              </button>
+                            )}
                             <button onClick={() => setBarcodeProduct(p)} className="text-text-secondary hover:text-brand-light transition-colors p-2 bg-white/5 hover:bg-white/10 rounded-md mr-2" title="Imprimir Etiqueta">
                               <Printer size={16} />
                             </button>
@@ -1170,6 +1620,11 @@ function Admin() {
                       <div className="flex justify-between items-center mt-3">
                         <span className="text-accent font-bold text-lg">{money(p.precio_venta)}</span>
                         <div className="flex gap-2">
+                          {userRole !== 3 && (
+                            <button onClick={() => abrirMovimiento(p)} className="text-text-secondary hover:text-status-success transition-colors p-2 bg-white/5 hover:bg-white/10 rounded-md" title="Cargar mercadería o ajustar stock">
+                              <PackagePlus size={16} />
+                            </button>
+                          )}
                           <button onClick={() => setBarcodeProduct(p)} className="text-text-secondary hover:text-brand-light transition-colors p-2 bg-white/5 hover:bg-white/10 rounded-md" title="Imprimir Etiqueta">
                             <Printer size={16} />
                           </button>
@@ -1184,6 +1639,129 @@ function Admin() {
               </>
             )}
             </div>
+
+            {/* Entrada de mercadería y ajuste por recuento */}
+            <AnimatePresence>
+              {movimientoProd && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+                    className="glass-card p-6 max-w-lg w-full max-h-[85vh] overflow-y-auto"
+                  >
+                    <div className="flex justify-between items-start mb-1">
+                      <h3 className="text-xl font-bold min-w-0 truncate">{movimientoProd.nombre}</h3>
+                      <button onClick={() => setMovimientoProd(null)} className="text-text-secondary hover:text-white transition-colors p-1 hover:bg-white/10 rounded-lg shrink-0">
+                        <X size={20} />
+                      </button>
+                    </div>
+                    <p className="text-sm text-text-muted mb-5">
+                      Stock actual: <span className="text-text-primary font-semibold">{movimientoProd.stock_actual} und.</span>
+                    </p>
+
+                    <form onSubmit={handleGuardarMovimiento}>
+                      <div className="grid grid-cols-2 gap-2 mb-4">
+                        {([
+                          ['INGRESO', 'Entró mercadería', 'Se suma al stock'],
+                          ['AJUSTE', 'Recuento físico', 'El stock queda en lo contado'],
+                        ] as const).map(([tipo, titulo, ayuda]) => (
+                          <button
+                            key={tipo}
+                            type="button"
+                            onClick={() => setMovimiento({ ...movimiento, tipo_movimiento: tipo })}
+                            className={`p-3 rounded-lg text-left border transition-colors ${
+                              movimiento.tipo_movimiento === tipo
+                                ? 'bg-brand/15 border-brand text-text-primary'
+                                : 'bg-white/5 border-white/10 text-text-secondary hover:bg-white/10'
+                            }`}
+                          >
+                            <span className="block text-sm font-semibold">{titulo}</span>
+                            <span className="block text-[11px] text-text-muted mt-0.5">{ayuda}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="mb-4">
+                        <label className="block text-xs text-text-secondary mb-1">
+                          {movimiento.tipo_movimiento === 'INGRESO' ? 'Unidades que entran' : 'Unidades contadas'}
+                        </label>
+                        <input
+                          required
+                          type="number"
+                          min={movimiento.tipo_movimiento === 'INGRESO' ? 1 : 0}
+                          max={1000000}
+                          autoFocus
+                          onWheel={e => e.currentTarget.blur()}
+                          className="glass-input w-full p-3 rounded-md text-lg"
+                          value={movimiento.cantidad}
+                          onChange={e => setMovimiento({ ...movimiento, cantidad: Math.trunc(Number(e.target.value) || 0) })}
+                        />
+                        {movimiento.tipo_movimiento === 'AJUSTE' && (
+                          <p className="text-xs text-text-muted mt-1">
+                            Queda en {movimiento.cantidad} und.
+                            {movimiento.cantidad !== movimientoProd.stock_actual && (
+                              <span className={movimiento.cantidad > movimientoProd.stock_actual ? ' text-status-success' : ' text-status-error'}>
+                                {' '}({movimiento.cantidad > movimientoProd.stock_actual ? '+' : ''}
+                                {movimiento.cantidad - movimientoProd.stock_actual} contra el sistema)
+                              </span>
+                            )}
+                          </p>
+                        )}
+                        {movimiento.tipo_movimiento === 'INGRESO' && movimiento.cantidad > 0 && (
+                          <p className="text-xs text-status-success mt-1">
+                            Queda en {movimientoProd.stock_actual + movimiento.cantidad} und.
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="mb-5">
+                        <label className="block text-xs text-text-secondary mb-1">Motivo (opcional)</label>
+                        <input
+                          className="glass-input w-full p-2 rounded-md"
+                          placeholder={movimiento.tipo_movimiento === 'INGRESO' ? 'Compra a proveedor…' : 'Recuento mensual, rotura…'}
+                          maxLength={200}
+                          value={movimiento.motivo}
+                          onChange={e => setMovimiento({ ...movimiento, motivo: e.target.value })}
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={guardandoMovimiento}
+                        className="w-full bg-status-success hover:bg-green-600 disabled:opacity-50 text-white px-4 py-2.5 rounded-lg font-semibold transition-colors"
+                      >
+                        {guardandoMovimiento ? 'Guardando…' : 'Registrar movimiento'}
+                      </button>
+                    </form>
+
+                    {historialStock.length > 0 && (
+                      <div className="mt-6 border-t border-white/10 pt-4">
+                        <p className="text-xs font-semibold text-text-secondary mb-2">Últimos movimientos</p>
+                        <ul className="space-y-1.5 text-xs">
+                          {historialStock.map((m: any) => (
+                            <li key={m.id} className="flex justify-between gap-3 text-text-muted">
+                              <span className="truncate">
+                                {new Date(m.fecha_hora).toLocaleString()} · {m.usuario_nombre}
+                                {m.motivo && ` · ${m.motivo}`}
+                              </span>
+                              {/* En un ajuste la cantidad es la diferencia encontrada,
+                                  que puede ser para arriba o para abajo: el detalle
+                                  está en el motivo, así que no se le pone signo. */}
+                              <span className={`shrink-0 font-semibold ${
+                                m.tipo_movimiento === 'EGRESO' ? 'text-status-error'
+                                : m.tipo_movimiento === 'AJUSTE' ? 'text-status-warning'
+                                : 'text-status-success'
+                              }`}>
+                                {m.tipo_movimiento === 'EGRESO' ? '-' : m.tipo_movimiento === 'INGRESO' ? '+' : '±'}{m.cantidad}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
 

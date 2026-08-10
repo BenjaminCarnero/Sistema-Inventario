@@ -13,6 +13,9 @@ export default defineConfig({
       '/descuentos': 'http://127.0.0.1:8001',
       '/pagos': 'http://127.0.0.1:8001',
       '/configuracion': 'http://127.0.0.1:8001',
+      '/categorias': 'http://127.0.0.1:8001',
+      '/stock': 'http://127.0.0.1:8001',
+      '/devoluciones': 'http://127.0.0.1:8001',
       // Lo usa el POS para saber si el servidor responde de verdad
       '/health': 'http://127.0.0.1:8001',
     }

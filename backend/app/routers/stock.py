@@ -38,6 +38,9 @@ def registrar_movimiento(
             detail=f"El tipo debe ser {' o '.join(TIPOS_PERMITIDOS)}. Las salidas las genera la venta.",
         )
 
+    if payload.tipo_movimiento == models.TipoMovimientoEnum.INGRESO.value and payload.cantidad <= 0:
+        raise HTTPException(status_code=400, detail="La cantidad que ingresa tiene que ser mayor a cero")
+
     producto = db.query(models.Producto).filter(
         models.Producto.id == payload.producto_id
     ).with_for_update().first()

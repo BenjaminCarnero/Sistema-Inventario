@@ -20,7 +20,9 @@ campo de código y con Enter se encadena toda la venta.
 - **Modo sin conexión**: vende, guarda y sincroniza al volver la red
 
 **Backoffice**
-- Catálogo con imágenes, búsqueda, filtros y etiquetas de código de barras
+- Catálogo con imágenes, categorías, búsqueda, filtros y etiquetas de código de barras
+- Entrada de mercadería y ajuste por recuento físico, con historial de quién y por qué
+- Devoluciones parciales y anulación de ventas: reponen el stock y descuentan de la caja
 - Alertas de stock bajo
 - Reportes: recaudación diaria, productos más vendidos, rentabilidad y arqueos de caja
 - Exportación a Excel por rango de fechas
@@ -153,6 +155,35 @@ Mercado Pago no aparece mientras no haya conexión, porque necesita el servidor.
 **Un corte de luz es otra cosa**: ahí se apaga el equipo. Conviene una UPS para
 la PC y el router, o trabajar desde una tablet con datos móviles.
 
+### Cargar mercadería y corregir el stock
+
+En **Admin › Catálogo**, el botón junto a cada producto abre dos operaciones:
+
+- **Entró mercadería**: suma las unidades que llegaron del proveedor.
+- **Recuento físico**: el stock queda en lo que contaste, y el sistema guarda la
+  diferencia contra lo que decía. Sirve después de un inventario.
+
+Las dos quedan registradas con el usuario, la fecha y el motivo, y se ven en el
+historial del mismo producto. Las salidas no se cargan a mano: las genera la venta.
+
+### Devolver o anular una venta
+
+En **Admin › Reportes y Cajas**, al abrir el detalle de un turno cada venta tiene
+**Anular / Devolver**. Se puede devolver una parte o la venta entera.
+
+La venta nunca se borra: queda registrada y la devolución la referencia, así el
+historial es auditable. La mercadería vuelve al stock, y lo devuelto en efectivo
+se descuenta del arqueo del turno. El importe se calcula sobre lo realmente
+cobrado, de modo que el descuento y el impuesto quedan repartidos.
+
+Sólo el administrador y el encargado pueden hacerlo: mueve plata de la caja.
+
+### Categorías
+
+En **Admin › Catálogo › Categorías** se agrupan los productos. Sirven para
+filtrar el catálogo en el backoffice y en la pantalla de venta. Borrar una
+categoría no borra sus productos: quedan sin categoría.
+
 ### Configurar el negocio
 
 En **Admin › Configuración › Parámetros del sistema** se cambian el logo, los
@@ -209,6 +240,19 @@ está implementado:
   y HSTS en producción.
 - Los PIN se guardan con **bcrypt**; las consultas usan el ORM, sin SQL armado a mano.
 
+### Tests
+
+Cubren los cálculos de plata (precio, impuesto en sus dos modos, descuentos,
+devoluciones y arqueo de caja) y cada agujero de seguridad que se encontró en la
+auditoría, para que no vuelvan a abrirse sin que nadie se entere. Corren contra
+una base temporal: nunca tocan la del comercio.
+
+```bash
+cd backend
+venv\Scripts\activate
+pytest
+```
+
 ### Qué NO subir nunca al repositorio
 
 - `backend/.env` — la clave de firma y el token de Mercado Pago
@@ -231,9 +275,11 @@ backend/
     auth.py               Hash de PIN, tokens y anti fuerza bruta
     dependencies.py       Sesión actual y control de roles
     configuracion_defaults.py   Parámetros configurables
-    routers/              auth, productos, ventas, cajas, reportes,
-                          pagos, descuentos y configuracion
+    routers/              auth, productos, categorias, ventas, devoluciones,
+                          stock, cajas, reportes, pagos, descuentos y
+                          configuracion
   alembic/versions/       Migraciones
+  tests/                  Tests de los cálculos de plata y de seguridad
   seed_admin.py           Crea el primer administrador
 
 frontend/src/

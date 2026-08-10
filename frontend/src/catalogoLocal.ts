@@ -15,6 +15,7 @@ export function paraCatalogoLocal(producto: any): ProductoLocal {
     precio_venta: producto.precio_venta,
     stock_actual: producto.stock_actual,
     imagen_url: producto.imagen_url ?? null,
+    categoria_id: producto.categoria_id ?? null,
   };
 }
 

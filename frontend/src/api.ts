@@ -311,6 +311,107 @@ export const api = {
     return this.parseJson(res, 'Error restaurando configuración');
   },
 
+  // --- Devoluciones y anulaciones -------------------------------------------
+
+  /** Qué queda por devolver de una venta, ya descontado lo devuelto antes. */
+  async getDevolvible(ventaId: number) {
+    const res = await fetch(`${API_URL}/devoluciones/venta/${ventaId}/disponible`, { headers: this.headers });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'Error obteniendo los productos devolvibles');
+    return this.parseJson(res, 'Error obteniendo los productos devolvibles');
+  },
+
+  async getDevoluciones(ventaId: number) {
+    const res = await fetch(`${API_URL}/devoluciones/venta/${ventaId}`, { headers: this.headers });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'Error obteniendo las devoluciones');
+    return this.parseJson(res, 'Error obteniendo las devoluciones');
+  },
+
+  /** Sin `detalles` se anula la venta entera. */
+  async crearDevolucion(ventaId: number, datos: {
+    motivo?: string,
+    metodo_devolucion?: string,
+    detalles?: { producto_id: number, cantidad: number }[],
+  }) {
+    const res = await fetch(`${API_URL}/devoluciones/venta/${ventaId}`, {
+      method: 'POST',
+      headers: this.headers,
+      body: JSON.stringify({ metodo_devolucion: 'EFECTIVO', detalles: [], ...datos })
+    });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'Error registrando la devolución');
+    return this.parseJson(res, 'Error registrando la devolución');
+  },
+
+  // --- Movimientos de stock -------------------------------------------------
+
+  /** INGRESO suma al stock; AJUSTE lo fija en la cantidad contada. */
+  async registrarMovimientoStock(datos: {
+    producto_id: number,
+    cantidad: number,
+    tipo_movimiento: 'INGRESO' | 'AJUSTE',
+    motivo?: string,
+  }) {
+    const res = await fetch(`${API_URL}/stock/movimientos`, {
+      method: 'POST',
+      headers: this.headers,
+      body: JSON.stringify(datos)
+    });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'Error registrando el movimiento');
+    return this.parseJson(res, 'Error registrando el movimiento');
+  },
+
+  async getMovimientosStock(productoId?: number, limite: number = 100) {
+    const filtro = productoId ? `producto_id=${productoId}&` : '';
+    const res = await fetch(`${API_URL}/stock/movimientos?${filtro}limite=${limite}`, { headers: this.headers });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'Error obteniendo el historial de stock');
+    return this.parseJson(res, 'Error obteniendo el historial de stock');
+  },
+
+  // --- Categorías -----------------------------------------------------------
+
+  async getCategorias() {
+    const res = await fetch(`${API_URL}/categorias/`, { headers: this.headers });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'Error obteniendo categorías');
+    return this.parseJson(res, 'Error obteniendo categorías');
+  },
+
+  async createCategoria(nombre: string) {
+    const res = await fetch(`${API_URL}/categorias/`, {
+      method: 'POST',
+      headers: this.headers,
+      body: JSON.stringify({ nombre })
+    });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'Error creando la categoría');
+    return this.parseJson(res, 'Error creando la categoría');
+  },
+
+  async updateCategoria(id: number, nombre: string) {
+    const res = await fetch(`${API_URL}/categorias/${id}`, {
+      method: 'PUT',
+      headers: this.headers,
+      body: JSON.stringify({ nombre })
+    });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'Error actualizando la categoría');
+    return this.parseJson(res, 'Error actualizando la categoría');
+  },
+
+  async deleteCategoria(id: number) {
+    const res = await fetch(`${API_URL}/categorias/${id}`, {
+      method: 'DELETE',
+      headers: this.headers
+    });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'Error eliminando la categoría');
+    return;
+  },
+
   async deleteDescuento(id: number) {
     const res = await fetch(`${API_URL}/descuentos/${id}`, {
       method: 'DELETE',
