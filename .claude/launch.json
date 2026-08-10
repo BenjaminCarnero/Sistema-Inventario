@@ -3,15 +3,15 @@
   "configurations": [
     {
       "name": "frontend-dev",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "frontend", "run", "dev"],
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["G:/Proyectos/SistemaInventarios/frontend/scripts/servidor.mjs"],
       "port": 5173,
-      "url": "https://localhost:5173"
+      "url": "http://localhost:5173"
     },
     {
       "name": "frontend-celular",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "frontend", "run", "dev:celular"],
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["G:/Proyectos/SistemaInventarios/frontend/scripts/servidor.mjs", "--https"],
       "port": 5173,
       "url": "https://localhost:5173"
     },

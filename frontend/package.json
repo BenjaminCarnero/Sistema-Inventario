@@ -4,8 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "dev:celular": "node scripts/dev-celular.mjs",
+    "dev": "node scripts/servidor.mjs",
+    "dev:celular": "node scripts/servidor.mjs --https",
     "certificado": "bash scripts/generar-certificado.sh",
     "build": "tsc -b && vite build",
     "lint": "eslint .",

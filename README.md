@@ -164,13 +164,13 @@ Una sola vez:
 
 ```bash
 cd frontend
-npm run certificado
+bash scripts/generar-certificado.sh
 ```
 
 Y para levantar el servidor por HTTPS:
 
 ```bash
-npm run dev:celular
+node scripts/servidor.mjs --https
 ```
 
 Se entra desde el celular a `https://<la-ip>:5173`. Como el certificado está
