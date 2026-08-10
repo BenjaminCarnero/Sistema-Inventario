@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Package, LayoutDashboard, Settings, LogOut, Plus, CloudDownload, ScanLine, Edit2, PieChart, Printer, Search, Users, X, CameraOff, Image as ImageIcon, Tag, AlertTriangle, FileSpreadsheet, TrendingUp, Undo2, PackagePlus, FolderTree, Truck } from 'lucide-react';
 import Barcode from 'react-barcode';
-import { Html5QrcodeScanner, Html5QrcodeSupportedFormats } from 'html5-qrcode';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db } from './db';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -15,6 +15,7 @@ import { ConfiguracionPanel } from './components/ConfiguracionPanel';
 import { useConfig } from './components/ConfigProvider';
 import { useCameraAvailability } from './useCamera';
 import { sincronizarCatalogo, paraCatalogoLocal } from './catalogoLocal';
+import { CONFIG_ESCANER, subirResolucion } from './escaner';
 
 /** Etiqueta de color según el tipo de movimiento de stock. */
 function EtiquetaMovimiento({ tipo }: { tipo: string }) {
@@ -212,20 +213,9 @@ function Admin() {
     // el diálogo de permisos en equipos sin webcam.
     if (!showScanner || cameraStatus !== 'available') return;
 
-    const scanner = new Html5QrcodeScanner("admin-reader", {
-      fps: 15,
-      qrbox: {width: 250, height: 100},
-      showTorchButtonIfSupported: true,
-      formatsToSupport: [
-        Html5QrcodeSupportedFormats.EAN_13,
-        Html5QrcodeSupportedFormats.EAN_8,
-        Html5QrcodeSupportedFormats.UPC_A,
-        Html5QrcodeSupportedFormats.UPC_E,
-        Html5QrcodeSupportedFormats.CODE_128,
-        Html5QrcodeSupportedFormats.QR_CODE
-      ]
-    }, false);
+    const scanner = new Html5QrcodeScanner("admin-reader", CONFIG_ESCANER, false);
     scannerRef.current = scanner;
+    const dejarDeEsperarLaCamara = subirResolucion(scanner);
 
     scanner.render(async (decodedText) => {
       playBeep();
@@ -256,6 +246,7 @@ function Admin() {
     }, () => {});
 
     return () => {
+      dejarDeEsperarLaCamara();
       if (scannerRef.current) {
         scannerRef.current.clear().catch(e => console.warn(e));
         scannerRef.current = null;

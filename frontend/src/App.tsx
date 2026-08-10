@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Html5QrcodeScanner, Html5QrcodeSupportedFormats } from 'html5-qrcode';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 import { ShoppingCart, ScanLine, WifiOff, Wifi, Printer, Banknote, CreditCard, Smartphone, Landmark, X, Camera, CameraOff, Package, Tag, Search, Plus, Minus, Trash2, Keyboard, CloudOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { QRCodeCanvas } from 'qrcode.react';
@@ -12,6 +12,7 @@ import { useCameraAvailability } from './useCamera';
 import { useConexion } from './useConexion';
 import { sanitizarMonto, formatearTope } from './montos';
 import { sincronizarCatalogo } from './catalogoLocal';
+import { CONFIG_ESCANER, subirResolucion } from './escaner';
 import { recordarCaja, cajaRecordada, cajaProvisoria, esProvisoria } from './cajaLocal';
 import { Logo, LogoMark } from './components/Logo';
 import { ProductImage } from './components/ProductImage';
@@ -186,19 +187,8 @@ function POS() {
   useEffect(() => {
     if (!caja || loadingCaja || !scannerActivo || cameraStatus !== 'available') return;
 
-    const scanner = new Html5QrcodeScanner("reader", {
-      fps: 15,
-      qrbox: {width: 250, height: 100},
-      showTorchButtonIfSupported: true,
-      formatsToSupport: [
-        Html5QrcodeSupportedFormats.EAN_13,
-        Html5QrcodeSupportedFormats.EAN_8,
-        Html5QrcodeSupportedFormats.UPC_A,
-        Html5QrcodeSupportedFormats.UPC_E,
-        Html5QrcodeSupportedFormats.CODE_128,
-        Html5QrcodeSupportedFormats.QR_CODE
-      ]
-    }, false);
+    const scanner = new Html5QrcodeScanner("reader", CONFIG_ESCANER, false);
+    const dejarDeEsperarLaCamara = subirResolucion(scanner);
 
     scanner.render(async (decodedText) => {
       const now = Date.now();
@@ -224,6 +214,7 @@ function POS() {
     });
 
     return () => {
+      dejarDeEsperarLaCamara();
       scanner.clear().catch(error => console.error("Failed to clear html5QrcodeScanner. ", error));
     };
   }, [caja, loadingCaja, scannerActivo, cameraStatus]);
