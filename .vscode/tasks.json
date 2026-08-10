@@ -1,0 +1,48 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Backend (puerto 8001)",
+      "type": "shell",
+      "command": "${workspaceFolder}/backend/venv/Scripts/python.exe",
+      "args": ["-m", "uvicorn", "app.main:app", "--reload", "--port", "8001"],
+      "options": { "cwd": "${workspaceFolder}/backend" },
+      "isBackground": true,
+      "presentation": { "group": "servidores", "panel": "dedicated" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Frontend (puerto 5173)",
+      "type": "shell",
+      "command": "node",
+      "args": ["scripts/servidor.mjs"],
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "isBackground": true,
+      "presentation": { "group": "servidores", "panel": "dedicated" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Frontend por HTTPS, para el celular",
+      "type": "shell",
+      "command": "node",
+      "args": ["scripts/servidor.mjs", "--https"],
+      "options": { "cwd": "${workspaceFolder}/frontend" },
+      "isBackground": true,
+      "presentation": { "group": "servidores", "panel": "dedicated" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Levantar todo",
+      "dependsOn": ["Backend (puerto 8001)", "Frontend (puerto 5173)"],
+      "dependsOrder": "parallel",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Levantar todo para el celular",
+      "dependsOn": ["Backend (puerto 8001)", "Frontend por HTTPS, para el celular"],
+      "dependsOrder": "parallel",
+      "problemMatcher": []
+    }
+  ]
+}

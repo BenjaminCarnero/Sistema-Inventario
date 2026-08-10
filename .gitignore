@@ -27,7 +27,11 @@ frontend/dist/
 frontend/dev-dist/
 
 # --- Editores y sistema operativo -------------------------------------------
-.vscode/
+# Se ignora el contenido y no la carpeta: excluido el directorio, git no entra
+# y cualquier excepción de adentro queda sin efecto.
+.vscode/*
+# Las tareas sí se comparten: sirven en cualquier máquina y no tienen datos propios
+!.vscode/tasks.json
 .idea/
 Thumbs.db
 .DS_Store
