@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:celular": "node scripts/dev-celular.mjs",
+    "certificado": "bash scripts/generar-certificado.sh",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"

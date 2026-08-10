@@ -155,27 +155,49 @@ por HTTPS.
 
 ### 8. Con HTTPS, para que ande la cámara (opcional)
 
-La forma más simple de tener HTTPS con un certificado válido, sin comprar un
-dominio ni abrir puertos en el router, es [Tailscale](https://tailscale.com):
-arma una red privada entre tus dispositivos y emite el certificado solo.
+Hay dos caminos. El primero funciona siempre; el segundo es más prolijo pero
+depende de que tu cuenta de Tailscale lo permita.
 
-Una sola vez, en la cuenta:
+#### Certificado propio
 
-1. Habilitar **Serve** y **HTTPS Certificates** en la consola de administración
-   (`login.tailscale.com`, sección DNS).
-2. Instalar Tailscale en la computadora y en el celular, con la misma cuenta.
+Una sola vez:
 
-Después, con `npm run dev` corriendo:
+```bash
+cd frontend
+npm run certificado
+```
+
+Y para levantar el servidor por HTTPS:
+
+```bash
+npm run dev:celular
+```
+
+Se entra desde el celular a `https://<la-ip>:5173`. Como el certificado está
+firmado por vos y no por una autoridad conocida, **la primera vez el navegador
+avisa que el sitio no es de confianza**: hay que entrar igual (*Configuración
+avanzada › Continuar*). Después queda aceptado.
+
+El certificado incluye las IPs que tenía la computadora al generarlo. Si cambia
+la IP, hay que volver a correr `npm run certificado`.
+
+El `npm run dev` de siempre sigue andando por HTTP, sin advertencias. La clave
+privada queda en `frontend/certs/`, que está en el `.gitignore`.
+
+#### Tailscale
+
+[Tailscale](https://tailscale.com) arma una red privada entre tus dispositivos
+y emite un certificado de verdad, así que no hay ninguna advertencia. Requiere
+habilitar **Serve** y **HTTPS Certificates** en la consola de administración, y
+tener la aplicación instalada en la computadora y en el celular con la misma
+cuenta. Después, con el servidor corriendo:
 
 ```bash
 tailscale serve --bg --https=443 http://127.0.0.1:5173
 ```
 
 `tailscale serve status` muestra la dirección `https://…​.ts.net` que queda
-publicada. Esa se abre desde el celular.
-
-Con eso el navegador considera el sitio seguro: **anda el escáner por cámara** y
-se puede instalar como aplicación desde el navegador.
+publicada.
 
 Es **`serve`, no `funnel`**: la app queda visible únicamente para tus propios
 dispositivos, no para internet. Nunca uses `funnel` con este sistema — dejaría

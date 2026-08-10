@@ -1,9 +1,42 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+/**
+ * Certificado propio para entrar por HTTPS desde el celular.
+ *
+ * Sin HTTPS el navegador no presta la cámara y el escáner queda inutilizable
+ * justo en el dispositivo donde más sirve. Se genera con
+ * `bash scripts/generar-certificado.sh` y no se sube al repositorio.
+ *
+ * Va detrás de `npm run dev:celular` y no del `npm run dev` de siempre: al
+ * estar firmado por uno mismo, el navegador muestra una advertencia que en el
+ * trabajo diario molesta y no aporta nada. Si falta el certificado, se avisa y
+ * se sigue por HTTP en lugar de no arrancar.
+ */
+function certificadoLocal() {
+  if (process.env.APPLIFY_HTTPS !== '1') return undefined
+
+  const carpeta = fileURLToPath(new URL('./certs/', import.meta.url))
+  const clave = `${carpeta}dev.key`
+  const certificado = `${carpeta}dev.crt`
+
+  if (!existsSync(clave) || !existsSync(certificado)) {
+    console.warn(
+      '\n  No hay certificado en frontend/certs/. Generalo con:\n' +
+      '      bash scripts/generar-certificado.sh\n' +
+      '  Por ahora se arranca por HTTP, sin cámara fuera de esta computadora.\n'
+    )
+    return undefined
+  }
+  return { key: readFileSync(clave), cert: readFileSync(certificado) }
+}
+
 export default defineConfig({
   server: {
+    https: certificadoLocal(),
     // Escucha en toda la red local para poder entrar desde el celular o la
     // tablet. El backend sigue atado a 127.0.0.1: el navegador le pega a la
     // API con rutas relativas y Vite hace de intermediario, así que alcanza
