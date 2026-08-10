@@ -9,6 +9,13 @@
       "url": "https://localhost:5173"
     },
     {
+      "name": "frontend-celular",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "frontend", "run", "dev:celular"],
+      "port": 5173,
+      "url": "https://localhost:5173"
+    },
+    {
       "name": "backend-api",
       "runtimeExecutable": "G:/Proyectos/SistemaInventarios/backend/venv/Scripts/python.exe",
       "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--app-dir", "backend", "--port", "8001"],
