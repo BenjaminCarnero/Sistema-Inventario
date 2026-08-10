@@ -23,6 +23,7 @@ campo de código y con Enter se encadena toda la venta.
 - Catálogo con imágenes, categorías, búsqueda, filtros y etiquetas de código de barras
 - Entrada de mercadería y ajuste por recuento físico
 - Registro completo de movimientos de stock: quién, cuándo y por qué, exportable a Excel
+- Reposición: proveedores, pedidos por WhatsApp y carga del stock al recibirlos
 - Devoluciones parciales y anulación de ventas: reponen el stock y descuentan de la caja
 - Alertas de stock bajo
 - Reportes: recaudación diaria, productos más vendidos, rentabilidad y arqueos de caja
@@ -172,6 +173,28 @@ y salió del depósito, filtrable por producto, por tipo y por rango de fechas, 
 exportable a Excel. Es lo que se mira para auditar el inventario cuando los
 números no cierran.
 
+### Reponer mercadería
+
+En **Admin › Reponer** está lo que falta, agrupado por proveedor, porque el
+pedido se hace por proveedor y no por producto.
+
+1. Cargá los proveedores con su teléfono de WhatsApp (botón **Proveedores**).
+2. Asigná el proveedor a cada producto, desde su ficha o desde la misma
+   pantalla de reposición.
+3. Poné cuánto pedís de cada uno y tocá **Armar pedido**. Si el producto tiene
+   una **cantidad habitual** configurada, el campo viene precargado con ella.
+4. El sistema arma el mensaje y lo abre en WhatsApp, o lo copiás para mandarlo
+   por donde quieras. El texto se configura en Configuración.
+5. Cuando llega la mercadería, **Recibí esto**: podés corregir las cantidades
+   si vino menos de lo pedido, y entra todo al stock de una sola vez.
+
+Mientras el pedido está en camino, el producto muestra cuántas unidades ya
+pediste. Es lo que evita pedir dos veces lo mismo.
+
+Los productos sin proveedor no se esconden: aparecen en su propio grupo con el
+aviso, así la pantalla sirve desde el primer día aunque no hayas cargado
+todavía ninguna ficha.
+
 ### Devolver o anular una venta
 
 En **Admin › Reportes y Cajas**, al abrir el detalle de un turno cada venta tiene
@@ -281,9 +304,9 @@ backend/
     auth.py               Hash de PIN, tokens y anti fuerza bruta
     dependencies.py       Sesión actual y control de roles
     configuracion_defaults.py   Parámetros configurables
-    routers/              auth, productos, categorias, ventas, devoluciones,
-                          stock, cajas, reportes, pagos, descuentos y
-                          configuracion
+    routers/              auth, productos, categorias, proveedores, ventas,
+                          devoluciones, stock, pedidos, cajas, reportes,
+                          pagos, descuentos y configuracion
   alembic/versions/       Migraciones
   tests/                  Tests de los cálculos de plata y de seguridad
   seed_admin.py           Crea el primer administrador

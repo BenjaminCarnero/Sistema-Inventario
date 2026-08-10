@@ -135,7 +135,7 @@ export const api = {
     return res.json();
   },
 
-  async createProducto(producto: {codigo_barras: string, nombre: string, precio_venta: number, costo: number, stock_actual: number, imagen_url?: string | null}) {
+  async createProducto(producto: {codigo_barras: string, nombre: string, precio_venta: number, costo: number, stock_actual: number, imagen_url?: string | null, categoria_id?: number | null, proveedor_id?: number | null, cantidad_pedido_habitual?: number | null}) {
     const res = await fetch(`${API_URL}/productos/`, {
       method: 'POST',
       headers: this.headers,
@@ -146,7 +146,7 @@ export const api = {
     return res.json();
   },
 
-  async updateProducto(id: number, producto: {codigo_barras?: string, nombre?: string, precio_venta?: number, costo?: number, stock_actual?: number, imagen_url?: string | null}) {
+  async updateProducto(id: number, producto: {codigo_barras?: string, nombre?: string, precio_venta?: number, costo?: number, stock_actual?: number, imagen_url?: string | null, categoria_id?: number | null, proveedor_id?: number | null, cantidad_pedido_habitual?: number | null}) {
     const res = await fetch(`${API_URL}/productos/${id}`, {
       method: 'PUT',
       headers: this.headers,
@@ -378,6 +378,84 @@ export const api = {
     if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
     if (!res.ok) throw await this.errorDe(res, 'Error obteniendo el historial de stock');
     return this.parseJson(res, 'Error obteniendo el historial de stock');
+  },
+
+  // --- Proveedores ----------------------------------------------------------
+
+  async getProveedores(incluirInactivos: boolean = false) {
+    const res = await fetch(`${API_URL}/proveedores/?incluir_inactivos=${incluirInactivos}`, { headers: this.headers });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'Error obteniendo proveedores');
+    return this.parseJson(res, 'Error obteniendo proveedores');
+  },
+
+  async createProveedor(proveedor: any) {
+    const res = await fetch(`${API_URL}/proveedores/`, {
+      method: 'POST', headers: this.headers, body: JSON.stringify(proveedor)
+    });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'Error creando el proveedor');
+    return this.parseJson(res, 'Error creando el proveedor');
+  },
+
+  async updateProveedor(id: number, proveedor: any) {
+    const res = await fetch(`${API_URL}/proveedores/${id}`, {
+      method: 'PUT', headers: this.headers, body: JSON.stringify(proveedor)
+    });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'Error actualizando el proveedor');
+    return this.parseJson(res, 'Error actualizando el proveedor');
+  },
+
+  async deleteProveedor(id: number) {
+    const res = await fetch(`${API_URL}/proveedores/${id}`, { method: 'DELETE', headers: this.headers });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'Error eliminando el proveedor');
+    return;
+  },
+
+  // --- Pedidos de reposición ------------------------------------------------
+
+  /** Lo que falta reponer, ya agrupado por proveedor. */
+  async getReponer() {
+    const res = await fetch(`${API_URL}/pedidos/reponer`, { headers: this.headers });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'Error calculando la reposición');
+    return this.parseJson(res, 'Error calculando la reposición');
+  },
+
+  async getPedidos(estado?: string) {
+    const filtro = estado ? `?estado=${estado}` : '';
+    const res = await fetch(`${API_URL}/pedidos/${filtro}`, { headers: this.headers });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'Error obteniendo los pedidos');
+    return this.parseJson(res, 'Error obteniendo los pedidos');
+  },
+
+  async createPedido(pedido: { proveedor_id: number, notas?: string, detalles: { producto_id: number, cantidad: number }[] }) {
+    const res = await fetch(`${API_URL}/pedidos/`, {
+      method: 'POST', headers: this.headers, body: JSON.stringify(pedido)
+    });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'Error registrando el pedido');
+    return this.parseJson(res, 'Error registrando el pedido');
+  },
+
+  /** Sin `detalles` se da por recibido todo lo pedido. */
+  async recibirPedido(id: number, detalles: { producto_id: number, cantidad_recibida: number }[] = []) {
+    const res = await fetch(`${API_URL}/pedidos/${id}/recibir`, {
+      method: 'POST', headers: this.headers, body: JSON.stringify({ detalles })
+    });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'Error recibiendo el pedido');
+    return this.parseJson(res, 'Error recibiendo el pedido');
+  },
+
+  async cancelarPedido(id: number) {
+    const res = await fetch(`${API_URL}/pedidos/${id}/cancelar`, { method: 'POST', headers: this.headers });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'Error cancelando el pedido');
+    return this.parseJson(res, 'Error cancelando el pedido');
   },
 
   // --- Categorías -----------------------------------------------------------

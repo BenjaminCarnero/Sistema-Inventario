@@ -16,6 +16,12 @@ def _validar_producto(datos: dict, db: Session = None):
         if not existe:
             raise HTTPException(status_code=400, detail="La categoría indicada no existe")
 
+    proveedor_id = datos.get("proveedor_id")
+    if proveedor_id is not None and db is not None:
+        existe = db.query(models.Proveedor).filter(models.Proveedor.id == proveedor_id).first()
+        if not existe:
+            raise HTTPException(status_code=400, detail="El proveedor indicado no existe")
+
     imagen = datos.get("imagen_url")
     if imagen:
         imagen = str(imagen).strip()

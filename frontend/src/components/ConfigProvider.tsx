@@ -22,6 +22,8 @@ export interface Config {
   metodos_pago_habilitados: string[];
   ticket_mensaje_pie: string;
   ticket_mostrar_logo: boolean;
+  pedido_saludo: string;
+  pedido_despedida: string;
 }
 
 /**
@@ -49,6 +51,8 @@ export const CONFIG_DEFAULT: Config = {
   metodos_pago_habilitados: ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'MERCADOPAGO'],
   ticket_mensaje_pie: '¡Gracias por su compra!',
   ticket_mostrar_logo: true,
+  pedido_saludo: 'Hola, te hago un pedido:',
+  pedido_despedida: '¡Gracias!',
 };
 
 const CACHE_KEY = 'applify_config';

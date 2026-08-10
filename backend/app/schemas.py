@@ -41,6 +41,24 @@ class Categoria(CategoriaBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ProveedorBase(BaseModel):
+    nombre: str
+    telefono: Optional[str] = Field(default=None, max_length=30)
+    email: Optional[str] = Field(default=None, max_length=150)
+    cuit: Optional[str] = Field(default=None, max_length=20)
+    notas: Optional[str] = Field(default=None, max_length=500)
+    activo: bool = True
+
+
+class ProveedorCreate(ProveedorBase):
+    pass
+
+
+class Proveedor(ProveedorBase):
+    id: int
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ProductoBase(BaseModel):
     codigo_barras: str
     nombre: str
@@ -48,6 +66,8 @@ class ProductoBase(BaseModel):
     costo: float
     categoria_id: Optional[int] = None
     imagen_url: Optional[str] = None
+    proveedor_id: Optional[int] = None
+    cantidad_pedido_habitual: Optional[int] = Field(default=None, ge=0, le=1_000_000)
 
 
 class ProductoCreate(ProductoBase):
@@ -62,6 +82,8 @@ class ProductoUpdate(BaseModel):
     stock_actual: Optional[int] = None
     categoria_id: Optional[int] = None
     imagen_url: Optional[str] = None
+    proveedor_id: Optional[int] = None
+    cantidad_pedido_habitual: Optional[int] = Field(default=None, ge=0, le=1_000_000)
 
 
 class Producto(ProductoBase):
@@ -284,3 +306,73 @@ class RentabilidadProducto(BaseModel):
     costo_total: float
     ganancia: float
     margen_pct: float
+
+
+# ---- Reposición: sugerencia y pedidos a proveedores -------------------------
+
+class ItemAReponer(BaseModel):
+    """Un producto que hay que reponer, con la cantidad ya propuesta."""
+    producto_id: int
+    producto_nombre: str
+    codigo_barras: str
+    stock_actual: int
+    # Lo que el dueño configuró como "de esto siempre pido tanto". Si no hay
+    # nada cargado, la pantalla deja el campo en blanco: mejor vacío que un
+    # número inventado.
+    cantidad_sugerida: Optional[int] = None
+    # Unidades de este producto que ya están en camino en otro pedido, para
+    # no pedir dos veces lo mismo
+    ya_pedido: int = 0
+
+
+class GrupoAReponer(BaseModel):
+    """Los faltantes de un mismo proveedor. El pedido se arma por proveedor."""
+    proveedor_id: Optional[int] = None
+    proveedor_nombre: Optional[str] = None
+    proveedor_telefono: Optional[str] = None
+    items: List[ItemAReponer]
+
+
+class DetallePedidoCreate(BaseModel):
+    producto_id: int
+    cantidad: int = Field(gt=0, le=1_000_000)
+
+
+class PedidoCreate(BaseModel):
+    proveedor_id: int
+    notas: Optional[str] = Field(default=None, max_length=500)
+    detalles: List[DetallePedidoCreate]
+
+
+class DetallePedidoRecibir(BaseModel):
+    producto_id: int
+    # Lo que realmente llegó: el proveedor manda lo que tiene
+    cantidad_recibida: int = Field(ge=0, le=1_000_000)
+
+
+class PedidoRecibir(BaseModel):
+    detalles: List[DetallePedidoRecibir] = []
+
+
+class DetallePedido(BaseModel):
+    id: int
+    producto_id: int
+    producto_nombre: Optional[str] = None
+    cantidad: int
+    cantidad_recibida: Optional[int] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Pedido(BaseModel):
+    id: int
+    proveedor_id: int
+    proveedor_nombre: Optional[str] = None
+    proveedor_telefono: Optional[str] = None
+    usuario_id: int
+    usuario_nombre: Optional[str] = None
+    fecha_hora: datetime
+    estado: str
+    fecha_recepcion: Optional[datetime] = None
+    notas: Optional[str] = None
+    detalles: List[DetallePedido]
+    model_config = ConfigDict(from_attributes=True)

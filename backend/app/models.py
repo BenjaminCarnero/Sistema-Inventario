@@ -59,6 +59,28 @@ class Categoria(Base):
     productos = relationship("Producto", back_populates="categoria")
 
 
+class Proveedor(Base):
+    """A quién se le compra la mercadería.
+
+    Un producto tiene un solo proveedor: para un comercio chico alcanza, y
+    evita una pantalla de relaciones que nadie mantiene al día.
+    """
+    __tablename__ = "proveedores"
+
+    id = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String(150), unique=True, index=True, nullable=False)
+    # El teléfono se usa para abrir WhatsApp con el pedido ya escrito
+    telefono = Column(String(30), nullable=True)
+    email = Column(String(150), nullable=True)
+    cuit = Column(String(20), nullable=True)
+    # "Entrega los martes", "pedido mínimo $50.000"…
+    notas = Column(String(500), nullable=True)
+    activo = Column(Boolean, default=True)
+
+    productos = relationship("Producto", back_populates="proveedor")
+    pedidos = relationship("Pedido", back_populates="proveedor")
+
+
 class Producto(Base):
     __tablename__ = "productos"
 
@@ -70,8 +92,14 @@ class Producto(Base):
     stock_actual = Column(Integer, default=0)
     categoria_id = Column(Integer, ForeignKey("categorias.id"), nullable=True)
     imagen_url = Column(String(500), nullable=True)
+    proveedor_id = Column(Integer, ForeignKey("proveedores.id"), nullable=True)
+    # "De esto siempre pido dos cajones". Viene precargado al armar el pedido.
+    # Es más confiable que calcularlo con las ventas cuando todavía hay poco
+    # historial, y el dueño ya sabe el número de memoria.
+    cantidad_pedido_habitual = Column(Integer, nullable=True)
 
     categoria = relationship("Categoria", back_populates="productos")
+    proveedor = relationship("Proveedor", back_populates="productos")
     detalles_venta = relationship("DetalleVenta", back_populates="producto")
     movimientos = relationship("MovimientoStock", back_populates="producto")
 
@@ -160,6 +188,48 @@ class DetalleDevolucion(Base):
     subtotal = Column(Float, nullable=False)
 
     devolucion = relationship("Devolucion", back_populates="detalles")
+    producto = relationship("Producto")
+
+
+class EstadoPedidoEnum(str, enum.Enum):
+    PENDIENTE = "PENDIENTE"   # se mandó al proveedor, todavía no llegó
+    RECIBIDO = "RECIBIDO"     # llegó y se cargó al stock
+    CANCELADO = "CANCELADO"   # no va a llegar
+
+
+class Pedido(Base):
+    """Pedido de reposición a un proveedor.
+
+    Existe sobre todo para responder dos preguntas del día a día: qué está en
+    camino (para no pedir dos veces lo mismo) y qué llegó. Al recibirlo carga
+    todo el stock de una, en vez de producto por producto.
+    """
+    __tablename__ = "pedidos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    proveedor_id = Column(Integer, ForeignKey("proveedores.id"), nullable=False, index=True)
+    usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
+    fecha_hora = Column(DateTime(timezone=True), default=ahora_utc)
+    estado = Column(String(20), default=EstadoPedidoEnum.PENDIENTE.value, nullable=False, index=True)
+    fecha_recepcion = Column(DateTime(timezone=True), nullable=True)
+    notas = Column(String(500), nullable=True)
+
+    proveedor = relationship("Proveedor", back_populates="pedidos")
+    detalles = relationship("DetallePedido", back_populates="pedido", cascade="all, delete-orphan")
+
+
+class DetallePedido(Base):
+    __tablename__ = "detalle_pedidos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    pedido_id = Column(Integer, ForeignKey("pedidos.id"), nullable=False)
+    producto_id = Column(Integer, ForeignKey("productos.id"), nullable=False, index=True)
+    cantidad = Column(Integer, nullable=False)
+    # Lo que realmente llegó. Puede diferir de lo pedido: el proveedor manda
+    # lo que tiene. Queda en NULL mientras el pedido está pendiente.
+    cantidad_recibida = Column(Integer, nullable=True)
+
+    pedido = relationship("Pedido", back_populates="detalles")
     producto = relationship("Producto")
 
 

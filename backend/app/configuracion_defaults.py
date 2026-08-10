@@ -102,6 +102,16 @@ DEFAULTS = {
         "valor": "true", "tipo": "boolean", "categoria": "ticket",
         "descripcion": "Mostrar el nombre del negocio destacado arriba del ticket",
     },
+
+    # ---- Reposición ----
+    "pedido_saludo": {
+        "valor": "Hola, te hago un pedido:", "tipo": "string", "categoria": "reposicion",
+        "descripcion": "Con qué empieza el mensaje que se le manda al proveedor. Adelante va el nombre del negocio.",
+    },
+    "pedido_despedida": {
+        "valor": "¡Gracias!", "tipo": "string", "categoria": "reposicion",
+        "descripcion": "Con qué termina el mensaje al proveedor",
+    },
 }
 
 CATEGORIAS = {
@@ -111,6 +121,7 @@ CATEGORIAS = {
     "moneda": "Moneda",
     "pos": "Punto de venta",
     "ticket": "Ticket",
+    "reposicion": "Pedidos a proveedores",
 }
 
 

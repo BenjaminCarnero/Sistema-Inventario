@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Package, LayoutDashboard, Settings, LogOut, Plus, CloudDownload, ScanLine, Edit2, PieChart, Printer, Search, Users, X, CameraOff, Image as ImageIcon, Tag, AlertTriangle, FileSpreadsheet, TrendingUp, Undo2, PackagePlus, FolderTree } from 'lucide-react';
+import { Package, LayoutDashboard, Settings, LogOut, Plus, CloudDownload, ScanLine, Edit2, PieChart, Printer, Search, Users, X, CameraOff, Image as ImageIcon, Tag, AlertTriangle, FileSpreadsheet, TrendingUp, Undo2, PackagePlus, FolderTree, Truck } from 'lucide-react';
 import Barcode from 'react-barcode';
 import { Html5QrcodeScanner, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -26,6 +26,21 @@ function EtiquetaMovimiento({ tipo }: { tipo: string }) {
   const [clase, etiqueta] = estilos[tipo] || ['bg-white/10 text-text-secondary', tipo];
   return (
     <span className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${clase}`}>
+      {etiqueta}
+    </span>
+  );
+}
+
+/** Etiqueta de color según el estado de un pedido a proveedor. */
+function EstadoPedido({ estado }: { estado: string }) {
+  const estilos: Record<string, [string, string]> = {
+    PENDIENTE: ['bg-status-warning/15 text-status-warning', 'En camino'],
+    RECIBIDO: ['bg-status-success/15 text-status-success', 'Recibido'],
+    CANCELADO: ['bg-white/10 text-text-muted', 'Cancelado'],
+  };
+  const [clase, etiqueta] = estilos[estado] || ['bg-white/10 text-text-secondary', estado];
+  return (
+    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase whitespace-nowrap ${clase}`}>
       {etiqueta}
     </span>
   );
@@ -69,7 +84,11 @@ function Admin() {
   // New/Edit Product Form States
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const PRODUCTO_VACIO = { codigo_barras: '', nombre: '', precio_venta: 0, costo: 0, stock_actual: 0, imagen_url: '', categoria_id: '' as number | '' };
+  const PRODUCTO_VACIO = {
+    codigo_barras: '', nombre: '', precio_venta: 0, costo: 0, stock_actual: 0,
+    imagen_url: '', categoria_id: '' as number | '',
+    proveedor_id: '' as number | '', cantidad_pedido_habitual: '' as number | '',
+  };
   const [newProd, setNewProd] = useState(PRODUCTO_VACIO);
   const [showScanner, setShowScanner] = useState(false);
   const cameraStatus = useCameraAvailability();
@@ -125,6 +144,27 @@ function Admin() {
   const [movimiento, setMovimiento] = useState(MOVIMIENTO_VACIO);
   const [historialStock, setHistorialStock] = useState<any[]>([]);
   const [guardandoMovimiento, setGuardandoMovimiento] = useState(false);
+
+  // Reposición: proveedores y pedidos
+  const [proveedores, setProveedores] = useState<any[]>([]);
+  const [mostrarProveedores, setMostrarProveedores] = useState(false);
+  const PROVEEDOR_VACIO = { nombre: '', telefono: '', email: '', cuit: '', notas: '', activo: true };
+  const [nuevoProveedor, setNuevoProveedor] = useState<any>(PROVEEDOR_VACIO);
+  const [editandoProveedor, setEditandoProveedor] = useState<number | null>(null);
+
+  const [subTabReponer, setSubTabReponer] = useState<'faltantes' | 'pedidos'>('faltantes');
+  const [gruposReponer, setGruposReponer] = useState<any[]>([]);
+  const [loadingReponer, setLoadingReponer] = useState(true);
+  const [cantidadesPedido, setCantidadesPedido] = useState<Record<number, number>>({});
+  const [armandoPedido, setArmandoPedido] = useState<number | null>(null);
+
+  const [pedidos, setPedidos] = useState<any[]>([]);
+  const [filtroPedidoEstado, setFiltroPedidoEstado] = useState('');
+  const [pedidoRecibiendo, setPedidoRecibiendo] = useState<any>(null);
+  const [cantidadesRecibidas, setCantidadesRecibidas] = useState<Record<number, number>>({});
+  const [procesandoPedido, setProcesandoPedido] = useState(false);
+  // Pedido recién creado, para ofrecer mandarlo por WhatsApp
+  const [pedidoParaEnviar, setPedidoParaEnviar] = useState<any>(null);
 
   // Registro completo de movimientos de stock (sección propia)
   const [movimientos, setMovimientos] = useState<any[]>([]);
@@ -239,6 +279,10 @@ function Admin() {
         api.getHistorialCajas().then(setHistorialCajas).catch(console.error).finally(() => setLoadingReportes(false));
       } else if (activeTab === 'stock') {
         cargarMovimientos();
+      } else if (activeTab === 'reponer') {
+        cargarReponer();
+        cargarPedidos();
+        cargarProveedores();
       } else if (activeTab === 'descuentos') {
         cargarDescuentos();
       } else if (activeTab === 'configuracion' && getUserRole() === 1) {
@@ -275,6 +319,199 @@ function Admin() {
 
   const cargarCategorias = () => {
     api.getCategorias().then(setCategorias).catch(console.error);
+  };
+
+  // --- Reposición -----------------------------------------------------------
+
+  const cargarProveedores = () => {
+    api.getProveedores().then(setProveedores).catch(console.error);
+  };
+
+  const cargarReponer = () => {
+    setLoadingReponer(true);
+    api.getReponer()
+      .then((grupos: any[]) => {
+        setGruposReponer(grupos);
+        // Se precarga la cantidad habitual de cada producto. Si no hay ninguna
+        // configurada el campo queda vacío: mejor eso que un número inventado.
+        const iniciales: Record<number, number> = {};
+        grupos.forEach(g => g.items.forEach((i: any) => {
+          if (i.cantidad_sugerida) iniciales[i.producto_id] = i.cantidad_sugerida;
+        }));
+        setCantidadesPedido(prev => ({ ...iniciales, ...prev }));
+      })
+      .catch(err => showToast(err.message, 'error'))
+      .finally(() => setLoadingReponer(false));
+  };
+
+  const cargarPedidos = (estado = filtroPedidoEstado) => {
+    api.getPedidos(estado || undefined).then(setPedidos).catch(console.error);
+  };
+
+  const handleGuardarProveedor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (editandoProveedor) {
+        await api.updateProveedor(editandoProveedor, nuevoProveedor);
+        showToast('Proveedor actualizado', 'success');
+      } else {
+        await api.createProveedor(nuevoProveedor);
+        showToast('Proveedor creado', 'success');
+      }
+      setNuevoProveedor(PROVEEDOR_VACIO);
+      setEditandoProveedor(null);
+      cargarProveedores();
+      cargarReponer();
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  const handleEliminarProveedor = async (p: any) => {
+    const conProductos = localProductos.filter(x => x.proveedor_id === p.id).length;
+    const ok = await confirm({
+      title: 'Dar de baja al proveedor',
+      message: conProductos
+        ? `${conProductos} producto${conProductos > 1 ? 's quedan' : ' queda'} sin proveedor. Si tiene pedidos hechos no se borra: se desactiva, para que el historial siga diciendo a quién se le compró.`
+        : `¿Dar de baja a "${p.nombre}"?`,
+      confirmText: 'Dar de baja',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.deleteProveedor(p.id);
+      cargarProveedores();
+      cargarReponer();
+      syncCatalog();
+      showToast('Proveedor dado de baja', 'success');
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  /** Asigna el proveedor desde la misma pantalla de reposición. */
+  const asignarProveedor = async (productoId: number, proveedorId: number) => {
+    try {
+      const guardado = await api.updateProducto(productoId, { proveedor_id: proveedorId });
+      await db.productos.put(paraCatalogoLocal(guardado));
+      cargarReponer();
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  const handleArmarPedido = async (grupo: any) => {
+    const detalles = grupo.items
+      .map((i: any) => ({ producto_id: i.producto_id, cantidad: cantidadesPedido[i.producto_id] || 0 }))
+      .filter((d: any) => d.cantidad > 0);
+
+    if (detalles.length === 0) {
+      showToast('Poné al menos una cantidad para armar el pedido', 'error');
+      return;
+    }
+
+    setArmandoPedido(grupo.proveedor_id);
+    try {
+      const pedido = await api.createPedido({ proveedor_id: grupo.proveedor_id, detalles });
+      showToast(`Pedido #${pedido.id} registrado`, 'success');
+      setPedidoParaEnviar(pedido);
+      // Las cantidades ya usadas se limpian para que no reaparezcan cargadas
+      setCantidadesPedido(prev => {
+        const copia = { ...prev };
+        detalles.forEach((d: any) => delete copia[d.producto_id]);
+        return copia;
+      });
+      cargarReponer();
+      cargarPedidos();
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    } finally {
+      setArmandoPedido(null);
+    }
+  };
+
+  /** Arma el texto del pedido con las plantillas de Configuración. */
+  const textoDelPedido = (pedido: any) => {
+    const lineas = pedido.detalles.map((d: any) => `• ${d.producto_nombre} — ${d.cantidad} u.`);
+    return [
+      `*${config.negocio_nombre}*`,
+      config.pedido_saludo || 'Hola, te hago un pedido:',
+      '',
+      ...lineas,
+      '',
+      config.pedido_despedida || '¡Gracias!',
+    ].join('\n');
+  };
+
+  const enviarPedidoPorWhatsapp = (pedido: any) => {
+    const texto = encodeURIComponent(textoDelPedido(pedido));
+    const telefono = (pedido.proveedor_telefono || '').replace(/\D/g, '');
+    window.open(`https://wa.me/${telefono}?text=${texto}`, '_blank', 'noopener,noreferrer');
+  };
+
+  const copiarPedido = async (pedido: any) => {
+    try {
+      await navigator.clipboard.writeText(textoDelPedido(pedido));
+      showToast('Pedido copiado', 'success');
+    } catch {
+      showToast('No se pudo copiar. Seleccioná el texto a mano.', 'error');
+    }
+  };
+
+  const abrirRecepcion = (pedido: any) => {
+    setPedidoRecibiendo(pedido);
+    // Arranca con lo pedido: lo normal es que haya llegado todo
+    const iniciales: Record<number, number> = {};
+    pedido.detalles.forEach((d: any) => { iniciales[d.producto_id] = d.cantidad; });
+    setCantidadesRecibidas(iniciales);
+  };
+
+  const handleRecibirPedido = async () => {
+    if (!pedidoRecibiendo) return;
+    const detalles = pedidoRecibiendo.detalles.map((d: any) => ({
+      producto_id: d.producto_id,
+      cantidad_recibida: cantidadesRecibidas[d.producto_id] ?? d.cantidad,
+    }));
+
+    const ok = await confirm({
+      title: `Recibir el pedido #${pedidoRecibiendo.id}`,
+      message: 'La mercadería entra al stock y queda registrada como ingreso. Esto no se puede deshacer.',
+      confirmText: 'Recibir',
+    });
+    if (!ok) return;
+
+    setProcesandoPedido(true);
+    try {
+      await api.recibirPedido(pedidoRecibiendo.id, detalles);
+      showToast('Mercadería cargada al stock', 'success');
+      setPedidoRecibiendo(null);
+      await syncCatalog();
+      cargarPedidos();
+      cargarReponer();
+      api.getStockBajo(umbralStock).then(setStockBajo).catch(console.error);
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    } finally {
+      setProcesandoPedido(false);
+    }
+  };
+
+  const handleCancelarPedido = async (pedido: any) => {
+    const ok = await confirm({
+      title: `Cancelar el pedido #${pedido.id}`,
+      message: 'Se marca como cancelado y deja de contar como mercadería en camino. El stock no se toca.',
+      confirmText: 'Cancelar el pedido',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await api.cancelarPedido(pedido.id);
+      showToast('Pedido cancelado', 'success');
+      cargarPedidos();
+      cargarReponer();
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
   };
 
   const cargarMovimientos = () => {
@@ -480,6 +717,9 @@ function Admin() {
         ...newProd,
         imagen_url: newProd.imagen_url?.trim() || null,
         categoria_id: newProd.categoria_id === '' ? null : Number(newProd.categoria_id),
+        proveedor_id: newProd.proveedor_id === '' ? null : Number(newProd.proveedor_id),
+        cantidad_pedido_habitual: newProd.cantidad_pedido_habitual === ''
+          ? null : Number(newProd.cantidad_pedido_habitual),
       };
 
       let guardado;
@@ -560,6 +800,8 @@ function Admin() {
       stock_actual: completo.stock_actual,
       imagen_url: completo.imagen_url || '',
       categoria_id: completo.categoria_id ?? '',
+      proveedor_id: completo.proveedor_id ?? '',
+      cantidad_pedido_habitual: completo.cantidad_pedido_habitual ?? '',
     });
     setEditingId(p.id);
     setShowAddForm(true);
@@ -783,6 +1025,19 @@ function Admin() {
           )}
           {userRole !== 3 && (
             <button
+              onClick={() => setActiveTab('reponer')}
+              className={`flex items-center justify-between gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-l-2 ${activeTab === 'reponer' ? 'bg-brand/15 text-brand-light border-l-brand' : 'hover:bg-white/5 text-text-secondary border-l-transparent'}`}
+            >
+              <span className="flex items-center gap-3"><Truck size={20} /> Reponer</span>
+              {stockBajo.length > 0 && (
+                <span className="bg-status-error text-white text-[10px] font-bold px-1.5 rounded-full min-w-[18px] text-center">
+                  {stockBajo.length}
+                </span>
+              )}
+            </button>
+          )}
+          {userRole !== 3 && (
+            <button
               onClick={() => setActiveTab('stock')}
               className={`flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-colors border-l-2 ${activeTab === 'stock' ? 'bg-brand/15 text-brand-light border-l-brand' : 'hover:bg-white/5 text-text-secondary border-l-transparent'}`}
             >
@@ -845,6 +1100,17 @@ function Admin() {
           </button>
         )}
         {userRole !== 3 && (
+          <button onClick={() => setActiveTab('reponer')} className={`relative p-2 rounded-lg flex flex-col items-center gap-1 ${activeTab === 'reponer' ? 'text-brand-light' : 'text-text-secondary'}`}>
+            <Truck size={24} />
+            {stockBajo.length > 0 && (
+              <span className="absolute top-0 right-0 bg-status-error text-white text-[9px] font-bold px-1 rounded-full min-w-[15px] text-center">
+                {stockBajo.length}
+              </span>
+            )}
+            <span className="text-[10px]">Reponer</span>
+          </button>
+        )}
+        {userRole !== 3 && (
           <button onClick={() => setActiveTab('stock')} className={`p-2 rounded-lg flex flex-col items-center gap-1 ${activeTab === 'stock' ? 'text-brand-light' : 'text-text-secondary'}`}>
             <PackagePlus size={24} />
             <span className="text-[10px]">Stock</span>
@@ -879,6 +1145,7 @@ function Admin() {
             {activeTab === 'dashboard' && 'Resumen General (En Vivo)'}
             {activeTab === 'productos' && 'Gestión de Catálogo (Real)'}
             {activeTab === 'descuentos' && 'Descuentos y Promociones'}
+            {activeTab === 'reponer' && 'Reposición de Mercadería'}
             {activeTab === 'stock' && 'Movimientos de Stock'}
             {activeTab === 'reportes' && 'Auditoría y Reportes de Caja'}
             {activeTab === 'configuracion' && 'Configuración del Sistema'}
@@ -1568,6 +1835,38 @@ function Admin() {
                   </div>
                 </div>
 
+                <div className="md:col-span-3">
+                  <label className="block text-xs text-text-secondary mb-1">Proveedor</label>
+                  <select
+                    className="glass-input w-full p-2 rounded-md h-[42px]"
+                    value={newProd.proveedor_id}
+                    onChange={e => setNewProd({ ...newProd, proveedor_id: e.target.value === '' ? '' : Number(e.target.value) })}
+                  >
+                    <option value="">Sin proveedor</option>
+                    {proveedores.map(p => (
+                      <option key={p.id} value={p.id}>{p.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-xs text-text-secondary mb-1">
+                    Cantidad habitual de pedido
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="Ej: 24"
+                    onWheel={e => e.currentTarget.blur()}
+                    className="glass-input w-full p-2 rounded-md"
+                    value={newProd.cantidad_pedido_habitual}
+                    onChange={e => setNewProd({ ...newProd, cantidad_pedido_habitual: e.target.value === '' ? '' : Number(e.target.value) })}
+                  />
+                </div>
+                <p className="md:col-span-5 -mt-2 text-xs text-text-muted">
+                  La cantidad habitual viene precargada al armar el pedido de reposición.
+                  Si la dejás vacía, el campo aparece en blanco y lo completás en el momento.
+                </p>
+
                 <div className="md:col-span-5 flex justify-end">
                   <button type="submit" className="bg-status-success text-white px-6 py-2 rounded-lg font-semibold hover:bg-green-600 transition-colors">
                     {editingId ? 'Guardar Cambios' : 'Guardar Producto Real'}
@@ -1835,6 +2134,425 @@ function Admin() {
                         </ul>
                       </div>
                     )}
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        )}
+
+        {activeTab === 'reponer' && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+            <div className="flex flex-wrap gap-2 mb-6">
+              {([['faltantes', 'Qué falta'], ['pedidos', 'Pedidos']] as const).map(([clave, etiqueta]) => (
+                <button
+                  key={clave}
+                  onClick={() => setSubTabReponer(clave)}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors ${
+                    subTabReponer === clave ? 'bg-brand text-white' : 'bg-white/5 text-text-secondary hover:bg-white/10'
+                  }`}
+                >
+                  {etiqueta}
+                  {clave === 'pedidos' && pedidos.filter(p => p.estado === 'PENDIENTE').length > 0 && (
+                    <span className="ml-2 bg-white/20 px-1.5 rounded-full text-[10px]">
+                      {pedidos.filter(p => p.estado === 'PENDIENTE').length}
+                    </span>
+                  )}
+                </button>
+              ))}
+              <button
+                onClick={() => setMostrarProveedores(!mostrarProveedores)}
+                className="px-4 py-2 rounded-lg font-medium text-sm bg-white/5 text-text-secondary hover:bg-white/10 transition-colors flex items-center gap-2 ml-auto"
+              >
+                <Truck size={16} /> Proveedores
+              </button>
+            </div>
+
+            <AnimatePresence>
+            {mostrarProveedores && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                className="glass-card p-6 mb-6 overflow-hidden"
+              >
+                <h3 className="font-semibold mb-1">Proveedores</h3>
+                <p className="text-xs text-text-muted mb-4">
+                  El teléfono es el que se usa para mandar el pedido por WhatsApp.
+                  Dar de baja a uno que ya tiene pedidos no lo borra: lo desactiva,
+                  para que el historial siga diciendo a quién se le compró.
+                </p>
+
+                <form onSubmit={handleGuardarProveedor} className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-5">
+                  <div>
+                    <label className="block text-xs text-text-secondary mb-1">Nombre</label>
+                    <input
+                      required maxLength={150}
+                      className="glass-input w-full p-2 rounded-md"
+                      value={nuevoProveedor.nombre}
+                      onChange={e => setNuevoProveedor({ ...nuevoProveedor, nombre: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-text-secondary mb-1">WhatsApp</label>
+                    <input
+                      placeholder="5491155551234"
+                      className="glass-input w-full p-2 rounded-md"
+                      value={nuevoProveedor.telefono}
+                      onChange={e => setNuevoProveedor({ ...nuevoProveedor, telefono: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-text-secondary mb-1">CUIT (opcional)</label>
+                    <input
+                      className="glass-input w-full p-2 rounded-md"
+                      value={nuevoProveedor.cuit}
+                      onChange={e => setNuevoProveedor({ ...nuevoProveedor, cuit: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-text-secondary mb-1">Notas (opcional)</label>
+                    <input
+                      placeholder="Entrega los martes…"
+                      className="glass-input w-full p-2 rounded-md"
+                      value={nuevoProveedor.notas}
+                      onChange={e => setNuevoProveedor({ ...nuevoProveedor, notas: e.target.value })}
+                    />
+                  </div>
+                  <div className="md:col-span-4 flex gap-2 justify-end">
+                    {editandoProveedor && (
+                      <button type="button" onClick={() => { setEditandoProveedor(null); setNuevoProveedor(PROVEEDOR_VACIO); }} className="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors text-sm">
+                        Cancelar
+                      </button>
+                    )}
+                    <button type="submit" className="bg-status-success text-white px-5 py-2 rounded-lg font-semibold hover:bg-green-600 transition-colors text-sm">
+                      {editandoProveedor ? 'Guardar cambios' : 'Agregar proveedor'}
+                    </button>
+                  </div>
+                </form>
+
+                {proveedores.length === 0 ? (
+                  <p className="text-sm text-text-muted">Todavía no cargaste ninguno.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {proveedores.map(p => (
+                      <div key={p.id} className="flex items-center gap-3 bg-white/5 p-3 rounded-lg">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium truncate">{p.nombre}</p>
+                          <p className="text-xs text-text-muted truncate">
+                            {p.telefono || 'Sin teléfono'}
+                            {p.cuit && ` · CUIT ${p.cuit}`}
+                            {p.notas && ` · ${p.notas}`}
+                            {' · '}
+                            {localProductos.filter(x => x.proveedor_id === p.id).length} producto(s)
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => { setEditandoProveedor(p.id); setNuevoProveedor({ ...PROVEEDOR_VACIO, ...p }); }}
+                          className="text-text-secondary hover:text-brand-light p-2 rounded shrink-0" title="Editar"
+                        >
+                          <Edit2 size={15} />
+                        </button>
+                        <button
+                          onClick={() => handleEliminarProveedor(p)}
+                          className="text-text-secondary hover:text-status-error p-2 rounded shrink-0" title="Dar de baja"
+                        >
+                          <X size={15} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </motion.div>
+            )}
+            </AnimatePresence>
+
+            {subTabReponer === 'faltantes' && (
+              <div className="glass-card p-6">
+                <h3 className="text-xl font-semibold mb-1">Lo que hay que reponer</h3>
+                <p className="text-sm text-text-muted mb-5">
+                  Productos con menos de {umbralStock} unidades, agrupados por proveedor.
+                  Poné cuánto querés pedir de cada uno y armá el pedido.
+                </p>
+
+                {loadingReponer ? (
+                  <div className="space-y-3">
+                    {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-24 w-full" />)}
+                  </div>
+                ) : gruposReponer.length === 0 ? (
+                  <EmptyState
+                    icon={Truck}
+                    title="No falta nada"
+                    description={`Ningún producto está por debajo de ${umbralStock} unidades.`}
+                  />
+                ) : (
+                  <div className="space-y-5">
+                    {gruposReponer.map(grupo => (
+                      <div key={grupo.proveedor_id ?? 'sin'} className={`rounded-xl border p-4 ${
+                        grupo.proveedor_id ? 'bg-white/5 border-white/10' : 'bg-status-warning/5 border-status-warning/30'
+                      }`}>
+                        <div className="flex flex-wrap justify-between items-start gap-2 mb-3">
+                          <div className="min-w-0">
+                            <h4 className="font-semibold">
+                              {grupo.proveedor_nombre || 'Sin proveedor asignado'}
+                            </h4>
+                            <p className="text-xs text-text-muted">
+                              {grupo.proveedor_nombre
+                                ? (grupo.proveedor_telefono || 'Sin teléfono cargado — vas a poder copiar el texto')
+                                : 'Asignales un proveedor para poder pedirlos'}
+                            </p>
+                          </div>
+                          {grupo.proveedor_id && (
+                            <button
+                              onClick={() => handleArmarPedido(grupo)}
+                              disabled={armandoPedido === grupo.proveedor_id}
+                              className="bg-brand hover:bg-brand-hover disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-colors shrink-0"
+                            >
+                              {armandoPedido === grupo.proveedor_id ? 'Armando…' : 'Armar pedido'}
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          {grupo.items.map((item: any) => (
+                            <div key={item.producto_id} className="flex flex-wrap items-center gap-3 bg-black/20 p-3 rounded-lg">
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium truncate">{item.producto_nombre}</p>
+                                <p className="text-xs text-text-muted">
+                                  Te quedan <span className="text-status-error font-semibold">{item.stock_actual}</span>
+                                  {item.ya_pedido > 0 && (
+                                    <span className="text-status-warning"> · ya pediste {item.ya_pedido} que están en camino</span>
+                                  )}
+                                </p>
+                              </div>
+
+                              {grupo.proveedor_id ? (
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <label className="text-xs text-text-secondary">Pedir</label>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    placeholder="—"
+                                    onWheel={e => e.currentTarget.blur()}
+                                    value={cantidadesPedido[item.producto_id] ?? ''}
+                                    onChange={e => setCantidadesPedido(prev => ({
+                                      ...prev,
+                                      [item.producto_id]: Math.max(0, Math.trunc(Number(e.target.value) || 0)),
+                                    }))}
+                                    className="glass-input w-24 p-2 rounded-md text-center"
+                                  />
+                                </div>
+                              ) : (
+                                <select
+                                  defaultValue=""
+                                  onChange={e => e.target.value && asignarProveedor(item.producto_id, Number(e.target.value))}
+                                  className="glass-input p-2 rounded-md text-sm shrink-0"
+                                >
+                                  <option value="">Asignar proveedor…</option>
+                                  {proveedores.map(p => (
+                                    <option key={p.id} value={p.id}>{p.nombre}</option>
+                                  ))}
+                                </select>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {subTabReponer === 'pedidos' && (
+              <div className="glass-card p-6">
+                <div className="flex flex-wrap justify-between items-center gap-3 mb-5">
+                  <h3 className="text-xl font-semibold">Pedidos a proveedores</h3>
+                  <select
+                    value={filtroPedidoEstado}
+                    onChange={e => { setFiltroPedidoEstado(e.target.value); cargarPedidos(e.target.value); }}
+                    className="glass-input p-2 rounded-md text-sm"
+                  >
+                    <option value="">Todos</option>
+                    <option value="PENDIENTE">En camino</option>
+                    <option value="RECIBIDO">Recibidos</option>
+                    <option value="CANCELADO">Cancelados</option>
+                  </select>
+                </div>
+
+                {pedidos.length === 0 ? (
+                  <EmptyState
+                    icon={Truck}
+                    title="No hay pedidos"
+                    description="Armá uno desde la pestaña «Qué falta»."
+                  />
+                ) : (
+                  <div className="space-y-4">
+                    {pedidos.map(p => (
+                      <div key={p.id} className="bg-white/5 p-4 rounded-lg border border-white/10">
+                        <div className="flex flex-wrap justify-between items-start gap-2 border-b border-white/10 pb-2 mb-3">
+                          <div className="min-w-0">
+                            <p className="font-semibold text-brand-light flex items-center gap-2 flex-wrap">
+                              Pedido #{p.id} · {p.proveedor_nombre}
+                              <EstadoPedido estado={p.estado} />
+                            </p>
+                            <p className="text-xs text-text-muted">
+                              {new Date(p.fecha_hora).toLocaleString()} · {p.usuario_nombre}
+                              {p.fecha_recepcion && ` · recibido el ${new Date(p.fecha_recepcion).toLocaleString()}`}
+                            </p>
+                          </div>
+                          <div className="flex gap-2 shrink-0">
+                            {p.estado === 'PENDIENTE' && (
+                              <>
+                                {p.proveedor_telefono && (
+                                  <button
+                                    onClick={() => enviarPedidoPorWhatsapp(p)}
+                                    className="text-xs font-semibold bg-status-success/15 text-status-success hover:bg-status-success/25 px-3 py-1.5 rounded-lg transition-colors"
+                                  >
+                                    WhatsApp
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => copiarPedido(p)}
+                                  className="text-xs font-semibold bg-white/5 text-text-secondary hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors"
+                                >
+                                  Copiar
+                                </button>
+                                <button
+                                  onClick={() => abrirRecepcion(p)}
+                                  className="text-xs font-semibold bg-brand hover:bg-brand-hover text-white px-3 py-1.5 rounded-lg transition-colors"
+                                >
+                                  Recibí esto
+                                </button>
+                                <button
+                                  onClick={() => handleCancelarPedido(p)}
+                                  className="text-xs font-semibold bg-status-error/10 text-status-error hover:bg-status-error/20 px-3 py-1.5 rounded-lg transition-colors"
+                                >
+                                  Cancelar
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        <ul className="text-sm space-y-1">
+                          {p.detalles.map((d: any) => (
+                            <li key={d.id} className="flex justify-between gap-3 text-text-secondary">
+                              <span className="min-w-0 truncate">{d.producto_nombre}</span>
+                              <span className="shrink-0">
+                                {d.cantidad_recibida != null && d.cantidad_recibida !== d.cantidad ? (
+                                  <>
+                                    <span className="text-text-muted line-through mr-2">{d.cantidad}</span>
+                                    <span className="text-status-warning font-semibold">llegaron {d.cantidad_recibida}</span>
+                                  </>
+                                ) : (
+                                  <span className="font-semibold">{d.cantidad} u.</span>
+                                )}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Pedido recién armado: ofrecer mandarlo */}
+            <AnimatePresence>
+              {pedidoParaEnviar && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+                    className="glass-card p-6 max-w-lg w-full max-h-[85vh] overflow-y-auto"
+                  >
+                    <div className="flex justify-between items-start mb-1">
+                      <h3 className="text-xl font-bold">Pedido #{pedidoParaEnviar.id} registrado</h3>
+                      <button onClick={() => setPedidoParaEnviar(null)} className="text-text-secondary hover:text-white p-1 hover:bg-white/10 rounded-lg">
+                        <X size={20} />
+                      </button>
+                    </div>
+                    <p className="text-xs text-text-muted mb-4">
+                      Queda como mercadería en camino. Cuando llegue, apretá «Recibí esto»
+                      en la pestaña Pedidos y el stock se carga solo.
+                    </p>
+
+                    <pre className="bg-black/30 p-4 rounded-lg text-sm whitespace-pre-wrap font-sans mb-4 max-h-60 overflow-y-auto">
+                      {textoDelPedido(pedidoParaEnviar)}
+                    </pre>
+
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      {pedidoParaEnviar.proveedor_telefono ? (
+                        <button
+                          onClick={() => { enviarPedidoPorWhatsapp(pedidoParaEnviar); setPedidoParaEnviar(null); }}
+                          className="flex-1 bg-status-success hover:bg-green-600 text-white px-4 py-2.5 rounded-lg font-semibold transition-colors"
+                        >
+                          Mandar por WhatsApp
+                        </button>
+                      ) : (
+                        <p className="flex-1 text-xs text-status-warning self-center">
+                          Este proveedor no tiene teléfono cargado. Copiá el texto y mandalo por donde le pidas.
+                        </p>
+                      )}
+                      <button
+                        onClick={() => copiarPedido(pedidoParaEnviar)}
+                        className="flex-1 bg-white/5 hover:bg-white/10 px-4 py-2.5 rounded-lg font-semibold transition-colors"
+                      >
+                        Copiar el texto
+                      </button>
+                    </div>
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
+
+            {/* Recepción de un pedido */}
+            <AnimatePresence>
+              {pedidoRecibiendo && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+                    className="glass-card p-6 max-w-lg w-full max-h-[85vh] overflow-y-auto"
+                  >
+                    <div className="flex justify-between items-start mb-1">
+                      <h3 className="text-xl font-bold">Recibir el pedido #{pedidoRecibiendo.id}</h3>
+                      <button onClick={() => setPedidoRecibiendo(null)} className="text-text-secondary hover:text-white p-1 hover:bg-white/10 rounded-lg">
+                        <X size={20} />
+                      </button>
+                    </div>
+                    <p className="text-xs text-text-muted mb-5">
+                      Corregí las cantidades si vino menos de lo que pediste. Todo entra al
+                      stock de una y queda registrado como ingreso.
+                    </p>
+
+                    <div className="space-y-2 mb-5">
+                      {pedidoRecibiendo.detalles.map((d: any) => (
+                        <div key={d.id} className="flex items-center gap-3 bg-white/5 p-3 rounded-lg">
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium truncate">{d.producto_nombre}</p>
+                            <p className="text-xs text-text-muted">Pediste {d.cantidad}</p>
+                          </div>
+                          <input
+                            type="number"
+                            min={0}
+                            onWheel={e => e.currentTarget.blur()}
+                            value={cantidadesRecibidas[d.producto_id] ?? d.cantidad}
+                            onChange={e => setCantidadesRecibidas(prev => ({
+                              ...prev,
+                              [d.producto_id]: Math.max(0, Math.trunc(Number(e.target.value) || 0)),
+                            }))}
+                            className="glass-input w-24 p-2 rounded-md text-center shrink-0"
+                          />
+                        </div>
+                      ))}
+                    </div>
+
+                    <button
+                      onClick={handleRecibirPedido}
+                      disabled={procesandoPedido}
+                      className="w-full bg-status-success hover:bg-green-600 disabled:opacity-50 text-white px-4 py-2.5 rounded-lg font-semibold transition-colors"
+                    >
+                      {procesandoPedido ? 'Cargando…' : 'Cargar al stock'}
+                    </button>
                   </motion.div>
                 </div>
               )}

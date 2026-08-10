@@ -8,6 +8,7 @@ export interface ProductoLocal {
   stock_actual: number;
   imagen_url?: string | null;
   categoria_id?: number | null;
+  proveedor_id?: number | null;
   // El costo NO se guarda acá a propósito: el catálogo local queda en el
   // equipo del cajero y expondría el margen del negocio. Para vender alcanza
   // con el precio de venta.

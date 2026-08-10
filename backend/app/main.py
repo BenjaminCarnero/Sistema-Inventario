@@ -73,7 +73,7 @@ def health_check():
 
 from app.routers import (
     auth, productos, ventas, cajas, reportes, pagos, descuentos,
-    configuracion, devoluciones, stock, categorias,
+    configuracion, devoluciones, stock, categorias, proveedores, pedidos,
 )
 app.include_router(auth.router)
 app.include_router(productos.router)
@@ -86,3 +86,5 @@ app.include_router(configuracion.router)
 app.include_router(devoluciones.router)
 app.include_router(stock.router)
 app.include_router(categorias.router)
+app.include_router(proveedores.router)
+app.include_router(pedidos.router)
