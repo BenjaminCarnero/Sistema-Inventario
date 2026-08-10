@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
-export type CameraStatus = 'checking' | 'available' | 'unavailable';
+/** `inseguro`: hay cámara, pero el navegador no la presta fuera de HTTPS. */
+export type CameraStatus = 'checking' | 'available' | 'unavailable' | 'inseguro';
 
 /**
  * Detecta si el dispositivo tiene cámara SIN disparar el diálogo de permisos.
@@ -19,7 +20,10 @@ export function useCameraAvailability(): CameraStatus {
 
     const detectar = async () => {
       if (!navigator.mediaDevices?.enumerateDevices) {
-        if (!cancelado) setStatus('unavailable');
+        // Fuera de un contexto seguro el navegador no expone `mediaDevices`.
+        // Pasa al entrar por la IP de la red desde el celular: el equipo sí
+        // tiene cámara, así que decir "no hay cámara" confundiría.
+        if (!cancelado) setStatus(window.isSecureContext ? 'unavailable' : 'inseguro');
         return;
       }
       try {

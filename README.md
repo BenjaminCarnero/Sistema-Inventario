@@ -125,6 +125,34 @@ npm run dev
 Abrí `http://localhost:5173`. El punto de venta está en `/` y el backoffice en
 `/admin`.
 
+### 7. Entrar desde el celular o una tablet
+
+El servidor ya escucha en toda la red local. Al levantarlo, Vite imprime algo así:
+
+```
+➜  Local:   http://localhost:5173/
+➜  Network: http://192.168.1.106:5173/
+```
+
+Esa dirección de **Network** es la que se abre desde el celular, con el celular
+conectado a la misma red wifi que la computadora. La computadora tiene que
+quedar prendida con las dos terminales corriendo: es la que tiene la base.
+
+Sólo hace falta abrir el puerto 5173. El backend sigue atado a `127.0.0.1` y no
+se expone: el navegador le pega a la API con rutas relativas y Vite hace de
+intermediario.
+
+Si el celular no carga la página, es el Firewall de Windows bloqueando la
+conexión entrante. La primera vez Windows suele preguntar; si le diste que no,
+hay que permitir Node.js en redes privadas desde *Firewall de Windows Defender ›
+Permitir una aplicación*.
+
+**La cámara no funciona así.** Los navegadores sólo prestan la cámara en
+`localhost` o con HTTPS, así que entrando por la IP el escáner queda
+deshabilitado y la pantalla lo avisa. Se puede vender igual escribiendo el
+código o con un lector bluetooth. Para tener la cámara hace falta servir la app
+por HTTPS.
+
 ---
 
 ## Cómo se usa

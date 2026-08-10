@@ -4,6 +4,11 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
   server: {
+    // Escucha en toda la red local para poder entrar desde el celular o la
+    // tablet. El backend sigue atado a 127.0.0.1: el navegador le pega a la
+    // API con rutas relativas y Vite hace de intermediario, así que alcanza
+    // con exponer este único puerto.
+    host: true,
     proxy: {
       '/auth': 'http://127.0.0.1:8001',
       '/productos': 'http://127.0.0.1:8001',

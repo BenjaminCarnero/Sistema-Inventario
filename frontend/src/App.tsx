@@ -894,6 +894,19 @@ function POS() {
             </div>
           )}
 
+          {cameraStatus === 'inseguro' && (
+            <div className="bg-status-warning/10 border border-status-warning/30 p-4 rounded-xl flex items-center gap-3 text-sm">
+              <CameraOff size={20} className="text-status-warning shrink-0" />
+              <div>
+                <p className="text-text-secondary font-medium">La cámara necesita una conexión segura</p>
+                <p className="text-text-muted text-xs mt-0.5">
+                  Entraste por <span className="font-mono">{window.location.hostname}</span> sin HTTPS y el
+                  navegador no presta la cámara. Usá un lector USB o el ingreso manual de abajo.
+                </p>
+              </div>
+            </div>
+          )}
+
           {cameraStatus === 'available' && !scannerActivo && (
             <div className="bg-white/5 border border-white/10 p-6 rounded-xl text-center">
               <Camera size={28} className="mx-auto mb-3 text-text-muted" />

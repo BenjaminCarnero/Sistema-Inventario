@@ -1767,6 +1767,10 @@ function Admin() {
                     <p className="text-xs text-text-muted flex items-center gap-2">
                       <CameraOff size={14} /> Sin cámara en este equipo — cargá el código a mano.
                     </p>
+                  ) : cameraStatus === 'inseguro' ? (
+                    <p className="text-xs text-status-warning flex items-center gap-2">
+                      <CameraOff size={14} /> Sin HTTPS el navegador no presta la cámara — cargá el código a mano.
+                    </p>
                   ) : null}
                 </div>
                 {showScanner && cameraStatus === 'available' && (
