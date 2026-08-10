@@ -12,7 +12,7 @@ import { useCameraAvailability } from './useCamera';
 import { useConexion } from './useConexion';
 import { sanitizarMonto, formatearTope } from './montos';
 import { sincronizarCatalogo } from './catalogoLocal';
-import { CONFIG_ESCANER, subirResolucion } from './escaner';
+import { CONFIG_ESCANER, mejorarImagen } from './escaner';
 import { recordarCaja, cajaRecordada, cajaProvisoria, esProvisoria } from './cajaLocal';
 import { Logo, LogoMark } from './components/Logo';
 import { ProductImage } from './components/ProductImage';
@@ -188,7 +188,7 @@ function POS() {
     if (!caja || loadingCaja || !scannerActivo || cameraStatus !== 'available') return;
 
     const scanner = new Html5QrcodeScanner("reader", CONFIG_ESCANER, false);
-    const dejarDeEsperarLaCamara = subirResolucion(scanner);
+    const dejarDeEsperarLaCamara = mejorarImagen(scanner);
 
     scanner.render(async (decodedText) => {
       const now = Date.now();

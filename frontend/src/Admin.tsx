@@ -15,7 +15,7 @@ import { ConfiguracionPanel } from './components/ConfiguracionPanel';
 import { useConfig } from './components/ConfigProvider';
 import { useCameraAvailability } from './useCamera';
 import { sincronizarCatalogo, paraCatalogoLocal } from './catalogoLocal';
-import { CONFIG_ESCANER, subirResolucion } from './escaner';
+import { CONFIG_ESCANER, mejorarImagen } from './escaner';
 
 /** Etiqueta de color según el tipo de movimiento de stock. */
 function EtiquetaMovimiento({ tipo }: { tipo: string }) {
@@ -215,7 +215,7 @@ function Admin() {
 
     const scanner = new Html5QrcodeScanner("admin-reader", CONFIG_ESCANER, false);
     scannerRef.current = scanner;
-    const dejarDeEsperarLaCamara = subirResolucion(scanner);
+    const dejarDeEsperarLaCamara = mejorarImagen(scanner);
 
     scanner.render(async (decodedText) => {
       playBeep();
