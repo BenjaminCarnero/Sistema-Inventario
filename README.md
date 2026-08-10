@@ -118,12 +118,20 @@ En **otra terminal**:
 
 ```bash
 cd frontend
-npm install
-npm run dev
+pnpm install
+node scripts/servidor.mjs
 ```
 
 Abrí `http://localhost:5173`. El punto de venta está en `/` y el backoffice en
 `/admin`.
+
+Las dependencias se manejan con [pnpm](https://pnpm.io). A diferencia de npm,
+no ejecuta los scripts de instalación de las dependencias salvo que se los
+autorice de forma explícita, que es por donde entran la mayoría de los ataques
+a la cadena de suministro.
+
+Si no lo tenés instalado, la forma de conseguirlo sin depender de npm es bajar
+el binario de las [releases oficiales](https://github.com/pnpm/pnpm/releases).
 
 ### 7. Entrar desde el celular o una tablet
 
@@ -179,10 +187,11 @@ avisa que el sitio no es de confianza**: hay que entrar igual (*Configuración
 avanzada › Continuar*). Después queda aceptado.
 
 El certificado incluye las IPs que tenía la computadora al generarlo. Si cambia
-la IP, hay que volver a correr `npm run certificado`.
+la IP, hay que volver a generar el certificado.
 
-El `npm run dev` de siempre sigue andando por HTTP, sin advertencias. La clave
-privada queda en `frontend/certs/`, que está en el `.gitignore`.
+El servidor normal (`node scripts/servidor.mjs`, sin `--https`) sigue andando
+por HTTP, sin advertencias. La clave privada queda en `frontend/certs/`, que
+está en el `.gitignore`.
 
 #### Tailscale
 
@@ -406,7 +415,7 @@ frontend/src/
 **Backend**: FastAPI · SQLAlchemy · Alembic · SQLite (o SQL Server) · bcrypt · PyJWT
 
 **Frontend**: React 19 · TypeScript · Vite · Tailwind · Dexie (IndexedDB) ·
-Recharts · Framer Motion · PWA
+Recharts · Framer Motion · PWA · dependencias con pnpm
 
 ---
 
@@ -414,7 +423,7 @@ Recharts · Framer Motion · PWA
 
 **"El servidor no responde" en el POS**
 Verificá que el backend esté levantado en el puerto 8001. Si acabás de bajar
-cambios, reiniciá también `npm run dev`: el proxy se define en `vite.config.ts`
+cambios, reiniciá también el servidor de Vite: el proxy se define en `vite.config.ts`
 y sólo se lee al arrancar.
 
 **La cámara no abre**
