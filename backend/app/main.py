@@ -71,7 +71,10 @@ def health_check():
     return {"status": "ok", "project": settings.PROJECT_NAME}
 
 
-from app.routers import auth, productos, ventas, cajas, reportes, pagos, descuentos, configuracion
+from app.routers import (
+    auth, productos, ventas, cajas, reportes, pagos, descuentos,
+    configuracion, devoluciones, stock, categorias,
+)
 app.include_router(auth.router)
 app.include_router(productos.router)
 app.include_router(ventas.router)
@@ -80,3 +83,6 @@ app.include_router(reportes.router)
 app.include_router(pagos.router)
 app.include_router(descuentos.router)
 app.include_router(configuracion.router)
+app.include_router(devoluciones.router)
+app.include_router(stock.router)
+app.include_router(categorias.router)

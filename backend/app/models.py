@@ -1,8 +1,21 @@
 from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from datetime import datetime, timezone
 import enum
+
 from app.database import Base
+
+
+def ahora_utc():
+    """Fecha actual en UTC, sin tzinfo.
+
+    Se genera en Python y no con CURRENT_TIMESTAMP porque SQLite lo guarda sin
+    microsegundos, mientras que SQLAlchemy compara contra valores que sí los
+    tienen: dos eventos del mismo segundo quedaban fuera de rango y el arqueo
+    de caja no contaba esas ventas.
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class RolEnum(int, enum.Enum):
@@ -68,7 +81,7 @@ class Venta(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
-    fecha_hora = Column(DateTime(timezone=True), server_default=func.now())
+    fecha_hora = Column(DateTime(timezone=True), default=ahora_utc)
     total = Column(Float, nullable=False)
     metodo_pago = Column(String(50), default=MetodoPagoEnum.EFECTIVO.value)
     monto_recibido = Column(Float, nullable=True)
@@ -81,10 +94,14 @@ class Venta(Base):
     # Identificador que genera el POS al cobrar. Permite reintentar la
     # sincronización sin registrar la venta dos veces.
     uuid_cliente = Column(String(64), unique=True, index=True, nullable=True)
+    # COMPLETADA, ANULADA o CON_DEVOLUCION. La venta nunca se borra: anularla
+    # deja el registro y suma una devolución que la referencia.
+    estado = Column(String(20), default="COMPLETADA", nullable=False)
     estado_sincronizacion = Column(Boolean, default=True)
 
     cajero = relationship("Usuario", back_populates="ventas")
     detalles = relationship("DetalleVenta", back_populates="venta", cascade="all, delete-orphan")
+    devoluciones = relationship("Devolucion", back_populates="venta", cascade="all, delete-orphan")
 
 
 class DetalleVenta(Base):
@@ -101,6 +118,51 @@ class DetalleVenta(Base):
     producto = relationship("Producto", back_populates="detalles_venta")
 
 
+class EstadoVentaEnum(str, enum.Enum):
+    COMPLETADA = "COMPLETADA"
+    ANULADA = "ANULADA"      # se dio de baja la venta entera
+    CON_DEVOLUCION = "CON_DEVOLUCION"  # se devolvió una parte
+
+
+class Devolucion(Base):
+    """Devolución total o parcial de una venta.
+
+    No se borra ni se modifica la venta original: la devolución queda como un
+    registro aparte que la referencia. Así el historial es auditable y los
+    reportes pueden mostrar tanto lo vendido como lo neto.
+    """
+    __tablename__ = "devoluciones"
+
+    id = Column(Integer, primary_key=True, index=True)
+    venta_id = Column(Integer, ForeignKey("ventas.id"), nullable=False, index=True)
+    usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
+    fecha_hora = Column(DateTime(timezone=True), default=ahora_utc)
+    motivo = Column(String(255), nullable=True)
+    total_devuelto = Column(Float, nullable=False)
+    # Una anulación es una devolución de todo lo vendido. Se distingue para
+    # poder mostrarla distinto y para los reportes.
+    es_anulacion = Column(Boolean, default=False)
+    # Cómo se le devolvió la plata al cliente: importa para el arqueo de caja
+    metodo_devolucion = Column(String(50), default=MetodoPagoEnum.EFECTIVO.value)
+
+    venta = relationship("Venta", back_populates="devoluciones")
+    detalles = relationship("DetalleDevolucion", back_populates="devolucion", cascade="all, delete-orphan")
+
+
+class DetalleDevolucion(Base):
+    __tablename__ = "detalle_devoluciones"
+
+    id = Column(Integer, primary_key=True, index=True)
+    devolucion_id = Column(Integer, ForeignKey("devoluciones.id"), nullable=False)
+    producto_id = Column(Integer, ForeignKey("productos.id"), nullable=False)
+    cantidad = Column(Integer, nullable=False)
+    precio_unitario = Column(Float, nullable=False)
+    subtotal = Column(Float, nullable=False)
+
+    devolucion = relationship("Devolucion", back_populates="detalles")
+    producto = relationship("Producto")
+
+
 class MovimientoStock(Base):
     __tablename__ = "movimientos_stock"
 
@@ -109,7 +171,7 @@ class MovimientoStock(Base):
     usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
     tipo_movimiento = Column(String(50), nullable=False)
     cantidad = Column(Integer, nullable=False)
-    fecha_hora = Column(DateTime(timezone=True), server_default=func.now())
+    fecha_hora = Column(DateTime(timezone=True), default=ahora_utc)
     motivo = Column(String(255), nullable=True)
 
     producto = relationship("Producto", back_populates="movimientos")
@@ -121,7 +183,7 @@ class CajaTurno(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
-    fecha_apertura = Column(DateTime(timezone=True), server_default=func.now())
+    fecha_apertura = Column(DateTime(timezone=True), default=ahora_utc)
     monto_inicial = Column(Float, nullable=False)
     fecha_cierre = Column(DateTime(timezone=True), nullable=True)
     monto_final_declarado = Column(Float, nullable=True)

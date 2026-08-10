@@ -19,7 +19,13 @@ def get_kpi(db: Session = Depends(database.get_db), current_user: models.Usuario
 
     ventas_hoy = db.query(models.Venta).filter(func.date(models.Venta.fecha_hora) == hoy).all()
 
-    total_recaudado = sum(v.total for v in ventas_hoy)
+    # Se descuenta lo devuelto hoy: la recaudación real es lo que quedó en caja,
+    # no lo que se facturó antes de las devoluciones.
+    devuelto_hoy = db.query(func.sum(models.Devolucion.total_devuelto)).filter(
+        func.date(models.Devolucion.fecha_hora) == hoy
+    ).scalar() or 0.0
+
+    total_recaudado = sum(v.total for v in ventas_hoy) - devuelto_hoy
     cantidad_ventas = len(ventas_hoy)
 
     if cantidad_ventas > 0:
@@ -37,6 +43,20 @@ def get_kpi(db: Session = Depends(database.get_db), current_user: models.Usuario
     )
 
 
+def _devoluciones_por_producto(db: Session) -> dict[int, dict]:
+    """Unidades e importe devueltos, por producto. Se usa para netear reportes."""
+    filas = db.query(
+        models.DetalleDevolucion.producto_id,
+        func.sum(models.DetalleDevolucion.cantidad).label("cantidad"),
+        func.sum(models.DetalleDevolucion.subtotal).label("importe"),
+    ).group_by(models.DetalleDevolucion.producto_id).all()
+
+    return {
+        f.producto_id: {"cantidad": f.cantidad or 0, "importe": f.importe or 0.0}
+        for f in filas
+    }
+
+
 @router.get("/top_productos", response_model=List[schemas.TopProducto])
 def get_top_productos(db: Session = Depends(database.get_db), current_user: models.Usuario = Depends(get_admin_user)):
     resultados = db.query(
@@ -45,19 +65,23 @@ def get_top_productos(db: Session = Depends(database.get_db), current_user: mode
         func.sum(models.DetalleVenta.cantidad).label("cantidad_vendida"),
         func.sum(models.DetalleVenta.subtotal).label("total_recaudado"),
     ).join(models.DetalleVenta, models.Producto.id == models.DetalleVenta.producto_id)\
-     .group_by(models.Producto.id)\
-     .order_by(desc("cantidad_vendida"))\
-     .limit(5).all()
+     .group_by(models.Producto.id).all()
 
-    return [
-        schemas.TopProducto(
+    devueltos = _devoluciones_por_producto(db)
+
+    # Un producto que se vendió y se devolvió no debería figurar como más vendido
+    top = []
+    for r in resultados:
+        dev = devueltos.get(r.id, {"cantidad": 0, "importe": 0.0})
+        top.append(schemas.TopProducto(
             id=r.id,
             nombre=r.nombre,
-            cantidad_vendida=r.cantidad_vendida or 0,
-            total_recaudado=r.total_recaudado or 0.0,
-        )
-        for r in resultados
-    ]
+            cantidad_vendida=max(0, (r.cantidad_vendida or 0) - dev["cantidad"]),
+            total_recaudado=max(0.0, (r.total_recaudado or 0.0) - dev["importe"]),
+        ))
+
+    top.sort(key=lambda x: x.cantidad_vendida, reverse=True)
+    return [t for t in top if t.cantidad_vendida > 0][:5]
 
 
 @router.get("/cajas", response_model=List[schemas.CajaReporte])
@@ -145,6 +169,15 @@ def get_ventas_periodo(
     productos = {p.id: p.nombre for p in db.query(models.Producto).all()}
     descuentos = {d.id: d.nombre for d in db.query(models.Descuento).all()}
 
+    # Cuánto se devolvió de cada venta del período
+    devuelto_por_venta = {
+        f.venta_id: f.total or 0.0
+        for f in db.query(
+            models.Devolucion.venta_id,
+            func.sum(models.Devolucion.total_devuelto).label("total"),
+        ).group_by(models.Devolucion.venta_id).all()
+    }
+
     resultado = []
     for v in ventas:
         detalles = [
@@ -172,6 +205,8 @@ def get_ventas_periodo(
             iva_porcentaje=v.iva_porcentaje,
             iva_monto=v.iva_monto,
             estado_sincronizacion=v.estado_sincronizacion,
+            estado=v.estado,
+            total_devuelto=devuelto_por_venta.get(v.id, 0.0),
             cajero_nombre=usuarios.get(v.usuario_id, "Desconocido"),
             detalles=detalles,
         ))
@@ -196,10 +231,14 @@ def get_rentabilidad(
      .group_by(models.Producto.id)\
      .all()
 
+    devueltos = _devoluciones_por_producto(db)
+
     rentabilidad = []
     for r in resultados:
-        cantidad = r.cantidad_vendida or 0
-        recaudado = r.total_recaudado or 0.0
+        # Lo devuelto no se vendió: ni suma ingreso ni consume costo
+        dev = devueltos.get(r.id, {"cantidad": 0, "importe": 0.0})
+        cantidad = max(0, (r.cantidad_vendida or 0) - dev["cantidad"])
+        recaudado = max(0.0, (r.total_recaudado or 0.0) - dev["importe"])
         costo_total = (r.costo or 0.0) * cantidad
         ganancia = recaudado - costo_total
         margen = (ganancia / recaudado * 100) if recaudado else 0.0
@@ -269,6 +308,15 @@ def get_ventas_caja(
     if caja.fecha_cierre:
         query_ventas = query_ventas.filter(models.Venta.fecha_hora <= caja.fecha_cierre)
 
+    # Cuánto se devolvió de cada venta, para mostrarlo en el detalle del turno
+    devuelto_caja = {
+        f.venta_id: f.total or 0.0
+        for f in db.query(
+            models.Devolucion.venta_id,
+            func.sum(models.Devolucion.total_devuelto).label("total"),
+        ).group_by(models.Devolucion.venta_id).all()
+    }
+
     ventas_reporte = []
     for v in query_ventas.all():
         detalles_reporte = []
@@ -299,6 +347,8 @@ def get_ventas_caja(
             descuento_id=v.descuento_id,
             descuento_nombre=descuento.nombre if descuento else None,
             iva_porcentaje=v.iva_porcentaje,
+            estado=v.estado,
+            total_devuelto=devuelto_caja.get(v.id, 0.0),
             iva_monto=v.iva_monto,
             estado_sincronizacion=v.estado_sincronizacion,
             detalles=detalles_reporte,

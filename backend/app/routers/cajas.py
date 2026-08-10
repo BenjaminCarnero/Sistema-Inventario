@@ -88,8 +88,21 @@ def cerrar_caja(
         models.Venta.metodo_pago == models.MetodoPagoEnum.EFECTIVO.value
     ).scalar() or 0.0
 
-    # Diferencia = (Monto Declarado) - (Monto Inicial + Ventas Efectivo)
-    monto_esperado = caja.monto_inicial + ventas_efectivo
+    # Lo devuelto en efectivo salió del cajón: sin restarlo, el arqueo daría
+    # faltante todos los días en que se hizo una devolución.
+    #
+    # Se filtra por ventana de tiempo y no por quién la registró, porque las
+    # devoluciones las autoriza un encargado pero la plata sale del cajón que
+    # está abierto. Con un solo puesto de caja —el caso de un kiosco— esto es
+    # exacto. Con varias cajas abiertas a la vez habría que asociar cada
+    # devolución a un turno concreto.
+    devoluciones_efectivo = db.query(func.sum(models.Devolucion.total_devuelto)).filter(
+        models.Devolucion.fecha_hora >= caja.fecha_apertura,
+        models.Devolucion.metodo_devolucion == models.MetodoPagoEnum.EFECTIVO.value
+    ).scalar() or 0.0
+
+    # Diferencia = Declarado - (Inicial + Ventas en efectivo - Devoluciones en efectivo)
+    monto_esperado = caja.monto_inicial + ventas_efectivo - devoluciones_efectivo
     diferencia = caja_close.monto_final_declarado - monto_esperado
 
     caja.fecha_cierre = func.now()

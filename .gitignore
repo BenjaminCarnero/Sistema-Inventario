@@ -36,3 +36,6 @@ desktop.ini
 *.bak
 *.tmp
 scratch_*.py
+
+# Cache de pytest
+.pytest_cache/

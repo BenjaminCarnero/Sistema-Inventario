@@ -130,6 +130,7 @@ class VentaBase(BaseModel):
     iva_porcentaje: Optional[float] = None
     iva_monto: Optional[float] = None
     uuid_cliente: Optional[str] = Field(default=None, max_length=64)
+    estado: str = "COMPLETADA"
     estado_sincronizacion: bool = True
 
 
@@ -143,6 +144,77 @@ class Venta(VentaBase):
     fecha_hora: datetime
     total: float
     detalles: List[DetalleVenta]
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DetalleDevolucionCreate(BaseModel):
+    producto_id: int
+    cantidad: int = Field(gt=0, le=10_000)
+
+
+class DevolucionCreate(BaseModel):
+    """Devolución de una venta.
+
+    Con `detalles` vacío se devuelve todo lo que quede pendiente, que es el
+    caso de una anulación.
+    """
+    motivo: Optional[str] = Field(default=None, max_length=255)
+    metodo_devolucion: str = "EFECTIVO"
+    detalles: List[DetalleDevolucionCreate] = []
+
+
+class DetalleDevolucion(BaseModel):
+    id: int
+    producto_id: int
+    cantidad: int
+    precio_unitario: float
+    subtotal: float
+    producto_nombre: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Devolucion(BaseModel):
+    id: int
+    venta_id: int
+    usuario_id: int
+    fecha_hora: datetime
+    motivo: Optional[str] = None
+    total_devuelto: float
+    es_anulacion: bool
+    metodo_devolucion: str
+    detalles: List[DetalleDevolucion]
+    usuario_nombre: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ProductoDevolvible(BaseModel):
+    """Cuánto queda por devolver de cada producto de una venta."""
+    producto_id: int
+    producto_nombre: str
+    precio_unitario: float
+    cantidad_vendida: int
+    cantidad_devuelta: int
+    cantidad_disponible: int
+
+
+class MovimientoStockCreate(BaseModel):
+    producto_id: int
+    # Positiva para INGRESO; para AJUSTE es el stock que contaste
+    cantidad: int = Field(gt=0, le=1_000_000)
+    tipo_movimiento: str  # INGRESO o AJUSTE
+    motivo: Optional[str] = Field(default=None, max_length=255)
+
+
+class MovimientoStockOut(BaseModel):
+    id: int
+    producto_id: int
+    usuario_id: int
+    tipo_movimiento: str
+    cantidad: int
+    fecha_hora: datetime
+    motivo: Optional[str] = None
+    producto_nombre: Optional[str] = None
+    usuario_nombre: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -191,6 +263,8 @@ class VentaReporte(Venta):
     detalles: List[DetalleVentaReporte]
     cajero_nombre: Optional[str] = None
     descuento_nombre: Optional[str] = None
+    # Cuánto de esta venta se devolvió, para poder mostrar el neto
+    total_devuelto: float = 0.0
 
 
 class ProductoStockBajo(BaseModel):
