@@ -153,6 +153,34 @@ deshabilitado y la pantalla lo avisa. Se puede vender igual escribiendo el
 código o con un lector bluetooth. Para tener la cámara hace falta servir la app
 por HTTPS.
 
+### 8. Con HTTPS, para que ande la cámara (opcional)
+
+La forma más simple de tener HTTPS con un certificado válido, sin comprar un
+dominio ni abrir puertos en el router, es [Tailscale](https://tailscale.com):
+arma una red privada entre tus dispositivos y emite el certificado solo.
+
+Una sola vez, en la cuenta:
+
+1. Habilitar **Serve** y **HTTPS Certificates** en la consola de administración
+   (`login.tailscale.com`, sección DNS).
+2. Instalar Tailscale en la computadora y en el celular, con la misma cuenta.
+
+Después, con `npm run dev` corriendo:
+
+```bash
+tailscale serve --bg --https=443 http://127.0.0.1:5173
+```
+
+`tailscale serve status` muestra la dirección `https://…​.ts.net` que queda
+publicada. Esa se abre desde el celular.
+
+Con eso el navegador considera el sitio seguro: **anda el escáner por cámara** y
+se puede instalar como aplicación desde el navegador.
+
+Es **`serve`, no `funnel`**: la app queda visible únicamente para tus propios
+dispositivos, no para internet. Nunca uses `funnel` con este sistema — dejaría
+la caja del negocio abierta al mundo.
+
 ---
 
 ## Cómo se usa

@@ -9,6 +9,12 @@ export default defineConfig({
     // API con rutas relativas y Vite hace de intermediario, así que alcanza
     // con exponer este único puerto.
     host: true,
+    // Vite rechaza las peticiones cuyo `Host` no reconoce, como defensa contra
+    // el DNS rebinding. Sin esto, entrar por el nombre de Tailscale da un
+    // "Blocked request" en vez de la app. Se permite el dominio de Tailscale en
+    // general y no el de una máquina concreta: alcanza para que funcione y no
+    // deja el nombre del tailnet escrito en un repositorio público.
+    allowedHosts: ['.ts.net'],
     proxy: {
       '/auth': 'http://127.0.0.1:8001',
       '/productos': 'http://127.0.0.1:8001',
