@@ -66,6 +66,12 @@ function POS() {
   // Catálogo y descuentos
   const [busquedaCatalogo, setBusquedaCatalogo] = useState('');
   const [categoriaActiva, setCategoriaActiva] = useState<number | null>(null);
+  // Sacar de la vista lo que no hay es una preferencia de cada mostrador, así
+  // que se recuerda en el equipo. Apagada por defecto: esconder un producto
+  // que físicamente está en la góndola es peor que verlo marcado.
+  const [ocultarSinStock, setOcultarSinStock] = useState(
+    () => localStorage.getItem('ocultar_sin_stock') === '1'
+  );
   const [categorias, setCategorias] = useState<any[]>(() => {
     // Se arranca con lo último que se bajó: sin conexión el filtro igual anda
     try {
@@ -85,12 +91,20 @@ function POS() {
   const lastScannedRef = useRef<{ code: string, time: number } | null>(null);
   const codigoInputRef = useRef<HTMLInputElement>(null);
 
-  const productosFiltrados = localProductos.filter(p => {
-    if (categoriaActiva !== null && p.categoria_id !== categoriaActiva) return false;
-    if (!busquedaCatalogo) return true;
-    return p.nombre.toLowerCase().includes(busquedaCatalogo.toLowerCase())
-      || p.codigo_barras.includes(busquedaCatalogo);
-  });
+  const sinStock = (p: ProductoLocal) => (p.stock_actual ?? 0) <= 0;
+
+  const productosFiltrados = localProductos
+    .filter(p => {
+      if (categoriaActiva !== null && p.categoria_id !== categoriaActiva) return false;
+      if (ocultarSinStock && sinStock(p)) return false;
+      if (!busquedaCatalogo) return true;
+      return p.nombre.toLowerCase().includes(busquedaCatalogo.toLowerCase())
+        || p.codigo_barras.includes(busquedaCatalogo);
+    })
+    // Lo que no hay va al final: estorba, pero no se esconde. El lector de
+    // códigos no pasa por acá, así que un producto agotado en el sistema pero
+    // presente en la góndola se sigue pudiendo cobrar escaneándolo.
+    .sort((a, b) => Number(sinStock(a)) - Number(sinStock(b)));
 
   // Sólo se ofrecen las categorías que tienen algo cargado: un filtro que
   // siempre da vacío es ruido en una pantalla de venta.
@@ -945,15 +959,28 @@ function POS() {
             <div className="absolute top-0 right-0 w-32 h-32 bg-brand/10 rounded-full blur-3xl -z-10 pointer-events-none"></div>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
               <h2 className="text-xl font-bold flex items-center gap-2"><Package className="text-accent" /> Catálogo</h2>
-              <div className="relative sm:w-64">
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-                <input
-                  type="text"
-                  value={busquedaCatalogo}
-                  onChange={e => setBusquedaCatalogo(e.target.value)}
-                  placeholder="Buscar producto…"
-                  className="glass-input w-full p-2 pl-9 rounded-xl text-sm"
-                />
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer whitespace-nowrap select-none">
+                  <input
+                    type="checkbox"
+                    checked={ocultarSinStock}
+                    onChange={e => {
+                      setOcultarSinStock(e.target.checked);
+                      localStorage.setItem('ocultar_sin_stock', e.target.checked ? '1' : '0');
+                    }}
+                  />
+                  Ocultar sin stock
+                </label>
+                <div className="relative sm:w-64">
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                  <input
+                    type="text"
+                    value={busquedaCatalogo}
+                    onChange={e => setBusquedaCatalogo(e.target.value)}
+                    placeholder="Buscar producto…"
+                    className="glass-input w-full p-2 pl-9 rounded-xl text-sm"
+                  />
+                </div>
               </div>
             </div>
             {categoriasConProductos.length > 0 && (
@@ -981,7 +1008,18 @@ function POS() {
             )}
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 overflow-y-auto max-h-[400px] pr-2 custom-scrollbar">
               {productosFiltrados.map(p => (
-                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} key={p.id} onClick={() => addToCart(p)} className="glass cursor-pointer rounded-xl p-3 flex flex-col justify-between transition-colors group hover:border-brand/50">
+                <motion.div
+                  whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} key={p.id}
+                  onClick={() => addToCart(p)}
+                  className={`glass cursor-pointer rounded-xl p-3 flex flex-col justify-between transition-colors group relative ${
+                    sinStock(p) ? 'opacity-45 hover:opacity-100 border-status-error/40' : 'hover:border-brand/50'
+                  }`}
+                >
+                  {sinStock(p) && (
+                    <span className="absolute top-2 right-2 bg-status-error text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">
+                      Sin stock
+                    </span>
+                  )}
                   <div>
                     <ProductImage src={p.imagen_url} alt={p.nombre} className="w-full h-20 rounded-lg mb-2" iconSize={24} />
                     <h3 className="font-semibold text-sm leading-tight mb-1 truncate text-white group-hover:text-brand-light transition-colors" title={p.nombre}>{p.nombre}</h3>
@@ -989,7 +1027,9 @@ function POS() {
                   </div>
                   <div className="mt-2 flex items-center gap-2">
                     <div className={`w-2 h-2 rounded-full ${p.stock_actual < 5 ? 'bg-status-error shadow-[0_0_8px_#EF4444]' : 'bg-status-success shadow-[0_0_8px_#10B981]'}`}></div>
-                    <span className="text-xs text-text-secondary font-medium">Stock: {p.stock_actual}</span>
+                    <span className="text-xs text-text-secondary font-medium">
+                      {sinStock(p) ? `El sistema dice ${p.stock_actual}` : `Stock: ${p.stock_actual}`}
+                    </span>
                   </div>
                 </motion.div>
               ))}
