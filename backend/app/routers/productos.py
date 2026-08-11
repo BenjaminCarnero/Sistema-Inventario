@@ -59,7 +59,18 @@ def read_productos(
     db: Session = Depends(database.get_db),
     current_user: models.Usuario = Depends(dependencies.get_current_active_user),
 ):
-    return db.query(models.Producto).offset(skip).limit(limit).all()
+    productos = db.query(models.Producto).offset(skip).limit(limit).all()
+
+    # El cajero necesita el catálogo para vender, no el margen del negocio. El
+    # POS ya descartaba el costo antes de guardarlo en el equipo; entregarlo
+    # por la API dejaba esa precaución sin efecto.
+    if current_user.rol_id == models.RolEnum.CAJERO.value:
+        return [
+            schemas.Producto.model_validate(p).model_copy(update={"costo": None})
+            for p in productos
+        ]
+
+    return productos
 
 
 @router.post("/", response_model=schemas.Producto, status_code=status.HTTP_201_CREATED)

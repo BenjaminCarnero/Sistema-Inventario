@@ -89,6 +89,10 @@ class ProductoUpdate(BaseModel):
 class Producto(ProductoBase):
     id: int
     stock_actual: int
+    # El costo es el margen del negocio. Viaja vacío para el cajero, que no
+    # tiene por qué conocerlo: el catálogo del POS ya lo descartaba al
+    # guardarlo en el equipo, pero la API lo entregaba igual.
+    costo: Optional[float] = None
     model_config = ConfigDict(from_attributes=True)
 
 
