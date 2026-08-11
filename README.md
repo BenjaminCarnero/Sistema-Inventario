@@ -419,6 +419,20 @@ Recharts · Framer Motion · PWA · dependencias con pnpm
 
 ---
 
+## Sobre las fechas
+
+Las fechas se guardan en UTC, pero los reportes cuentan los días según el
+**reloj de pared del local**. Son cosas distintas: en Argentina, a partir de
+las 21:00 el día en UTC ya es el siguiente, así que comparar contra la fecha
+guardada hacía que la recaudación del día apareciera en cero justo en el
+horario de más venta.
+
+Los reportes convierten el día local a un rango en UTC antes de consultar. Si
+el sistema se usa en otro huso horario, funciona igual: toma la zona horaria de
+la computadora donde corre el backend.
+
+---
+
 ## Problemas comunes
 
 **"El servidor no responde" en el POS**
