@@ -2,7 +2,6 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { api } from '../api';
 
 export interface Config {
-  app_nombre: string;
   marca_logo_url: string;
   marca_color_primario: string;
   marca_color_acento: string;
@@ -31,7 +30,6 @@ export interface Config {
  * mientras la configuración carga y como respaldo si el POS está offline.
  */
 export const CONFIG_DEFAULT: Config = {
-  app_nombre: 'APPLIFY POS',
   marca_logo_url: '',
   marca_color_primario: '#8251EE',
   marca_color_acento: '#00F2FE',
@@ -150,15 +148,24 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (localStorage.getItem('token')) recargar();
-    else setCargando(false);
+    if (localStorage.getItem('token')) {
+      recargar();
+      return;
+    }
+    // Sin sesión se pide sólo la marca, que no es secreta: sin esto, un
+    // dispositivo que nunca entró muestra el nombre y los colores por
+    // defecto justo en la primera pantalla que se ve.
+    api.getMarca()
+      .then((marca: Partial<Config>) => setConfig(previa => ({ ...previa, ...marca })))
+      .catch(() => { /* sin red: quedan el cache o los defaults */ })
+      .finally(() => setCargando(false));
   }, [recargar]);
 
   // Marca: colores y título se aplican apenas cambia la configuración, tanto al
   // arrancar desde el cache como al guardar cambios en el panel de admin.
   useEffect(() => {
     aplicarTema(config);
-    if (config.app_nombre) document.title = config.app_nombre;
+    if (config.negocio_nombre) document.title = config.negocio_nombre;
   }, [config]);
 
   const money = useCallback(

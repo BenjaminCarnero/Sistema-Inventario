@@ -86,7 +86,10 @@ function Admin() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const PRODUCTO_VACIO = {
-    codigo_barras: '', nombre: '', precio_venta: 0, costo: 0, stock_actual: 0,
+    codigo_barras: '', nombre: '',
+    // Vacíos y no en cero: con un 0 escrito hay que borrarlo antes de
+    // tipear, y si no se borra queda pegado adelante del número.
+    precio_venta: '' as number | '', costo: '' as number | '', stock_actual: '' as number | '',
     imagen_url: '', categoria_id: '' as number | '',
     proveedor_id: '' as number | '', cantidad_pedido_habitual: '' as number | '',
   };
@@ -111,7 +114,7 @@ function Admin() {
   const [descuentos, setDescuentos] = useState<any[]>([]);
   const [loadingDescuentos, setLoadingDescuentos] = useState(true);
   const [editandoDescuento, setEditandoDescuento] = useState<number | null>(null);
-  const NUEVO_DESCUENTO = { nombre: '', codigo_promocional: '', tipo: 'PORCENTAJE', valor: 0, producto_id: '', activo: true, fecha_inicio: '', fecha_fin: '' };
+  const NUEVO_DESCUENTO = { nombre: '', codigo_promocional: '', tipo: 'PORCENTAJE', valor: '' as number | '', producto_id: '', activo: true, fecha_inicio: '', fecha_fin: '' };
   const [nuevoDescuento, setNuevoDescuento] = useState<any>(NUEVO_DESCUENTO);
 
   // Alertas de stock
@@ -141,7 +144,7 @@ function Admin() {
 
   // Entrada de mercadería: producto sobre el que se está cargando stock
   const [movimientoProd, setMovimientoProd] = useState<any>(null);
-  const MOVIMIENTO_VACIO = { tipo_movimiento: 'INGRESO' as 'INGRESO' | 'AJUSTE', cantidad: 0, motivo: '' };
+  const MOVIMIENTO_VACIO = { tipo_movimiento: 'INGRESO' as 'INGRESO' | 'AJUSTE', cantidad: '' as number | '', motivo: '' };
   const [movimiento, setMovimiento] = useState(MOVIMIENTO_VACIO);
   const [historialStock, setHistorialStock] = useState<any[]>([]);
   const [guardandoMovimiento, setGuardandoMovimiento] = useState(false);
@@ -708,6 +711,9 @@ function Admin() {
         ...newProd,
         imagen_url: newProd.imagen_url?.trim() || null,
         categoria_id: newProd.categoria_id === '' ? null : Number(newProd.categoria_id),
+        precio_venta: Number(newProd.precio_venta) || 0,
+        costo: Number(newProd.costo) || 0,
+        stock_actual: Number(newProd.stock_actual) || 0,
         proveedor_id: newProd.proveedor_id === '' ? null : Number(newProd.proveedor_id),
         cantidad_pedido_habitual: newProd.cantidad_pedido_habitual === ''
           ? null : Number(newProd.cantidad_pedido_habitual),
@@ -846,7 +852,7 @@ function Admin() {
 
   const abrirMovimiento = async (p: any) => {
     setMovimientoProd(p);
-    setMovimiento({ ...MOVIMIENTO_VACIO, cantidad: 0 });
+    setMovimiento({ ...MOVIMIENTO_VACIO });
     setHistorialStock([]);
     try {
       setHistorialStock(await api.getMovimientosStock(p.id, 15));
@@ -858,7 +864,8 @@ function Admin() {
   const handleGuardarMovimiento = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!movimientoProd) return;
-    if (movimiento.tipo_movimiento === 'INGRESO' && movimiento.cantidad <= 0) {
+    const cantidad = Number(movimiento.cantidad) || 0;
+    if (movimiento.tipo_movimiento === 'INGRESO' && cantidad <= 0) {
       showToast('La cantidad que ingresa tiene que ser mayor a cero', 'error');
       return;
     }
@@ -866,7 +873,7 @@ function Admin() {
     try {
       await api.registrarMovimientoStock({
         producto_id: movimientoProd.id,
-        cantidad: Math.trunc(movimiento.cantidad),
+        cantidad: Math.trunc(cantidad),
         tipo_movimiento: movimiento.tipo_movimiento,
         motivo: movimiento.motivo.trim() || undefined,
       });
@@ -876,8 +883,8 @@ function Admin() {
       api.getStockBajo(umbralStock).then(setStockBajo).catch(console.error);
       showToast(
         movimiento.tipo_movimiento === 'INGRESO'
-          ? `Entraron ${movimiento.cantidad} unidades de ${movimientoProd.nombre}`
-          : `Stock de ${movimientoProd.nombre} ajustado a ${movimiento.cantidad}`,
+          ? `Entraron ${cantidad} unidades de ${movimientoProd.nombre}`
+          : `Stock de ${movimientoProd.nombre} ajustado a ${cantidad}`,
         'success'
       );
       setMovimientoProd(null);
@@ -1779,15 +1786,15 @@ function Admin() {
                 </div>
                 <div>
                   <label className="block text-xs text-text-secondary mb-1">Costo ($)</label>
-                  <input required type="number" className="glass-input w-full p-2 rounded-md" value={newProd.costo} onChange={e => setNewProd({...newProd, costo: Number(e.target.value)})} />
+                  <input required type="number" className="glass-input w-full p-2 rounded-md" value={newProd.costo} onChange={e => setNewProd({...newProd, costo: e.target.value === '' ? '' : Number(e.target.value)})} />
                 </div>
                 <div>
                   <label className="block text-xs text-text-secondary mb-1">Precio de Venta ($)</label>
-                  <input required type="number" className="glass-input w-full p-2 rounded-md" value={newProd.precio_venta} onChange={e => setNewProd({...newProd, precio_venta: Number(e.target.value)})} />
+                  <input required type="number" className="glass-input w-full p-2 rounded-md" value={newProd.precio_venta} onChange={e => setNewProd({...newProd, precio_venta: e.target.value === '' ? '' : Number(e.target.value)})} />
                 </div>
                 <div>
                   <label className="block text-xs text-text-secondary mb-1">Stock Inicial</label>
-                  <input required type="number" className="glass-input w-full p-2 rounded-md" value={newProd.stock_actual} onChange={e => setNewProd({...newProd, stock_actual: Number(e.target.value)})} />
+                  <input required type="number" className="glass-input w-full p-2 rounded-md" value={newProd.stock_actual} onChange={e => setNewProd({...newProd, stock_actual: e.target.value === '' ? '' : Number(e.target.value)})} />
                 </div>
 
                 <div className="md:col-span-3">
@@ -2064,22 +2071,22 @@ function Admin() {
                           onWheel={e => e.currentTarget.blur()}
                           className="glass-input w-full p-3 rounded-md text-lg"
                           value={movimiento.cantidad}
-                          onChange={e => setMovimiento({ ...movimiento, cantidad: Math.trunc(Number(e.target.value) || 0) })}
+                          onChange={e => setMovimiento({ ...movimiento, cantidad: e.target.value === '' ? '' : Math.trunc(Number(e.target.value) || 0) })}
                         />
                         {movimiento.tipo_movimiento === 'AJUSTE' && (
                           <p className="text-xs text-text-muted mt-1">
-                            Queda en {movimiento.cantidad} und.
-                            {movimiento.cantidad !== movimientoProd.stock_actual && (
-                              <span className={movimiento.cantidad > movimientoProd.stock_actual ? ' text-status-success' : ' text-status-error'}>
-                                {' '}({movimiento.cantidad > movimientoProd.stock_actual ? '+' : ''}
-                                {movimiento.cantidad - movimientoProd.stock_actual} contra el sistema)
+                            Queda en {Number(movimiento.cantidad || 0)} und.
+                            {Number(movimiento.cantidad || 0) !== movimientoProd.stock_actual && (
+                              <span className={Number(movimiento.cantidad || 0) > movimientoProd.stock_actual ? ' text-status-success' : ' text-status-error'}>
+                                {' '}({Number(movimiento.cantidad || 0) > movimientoProd.stock_actual ? '+' : ''}
+                                {Number(movimiento.cantidad || 0) - movimientoProd.stock_actual} contra el sistema)
                               </span>
                             )}
                           </p>
                         )}
-                        {movimiento.tipo_movimiento === 'INGRESO' && movimiento.cantidad > 0 && (
+                        {movimiento.tipo_movimiento === 'INGRESO' && Number(movimiento.cantidad || 0) > 0 && (
                           <p className="text-xs text-status-success mt-1">
-                            Queda en {movimientoProd.stock_actual + movimiento.cantidad} und.
+                            Queda en {movimientoProd.stock_actual + Number(movimiento.cantidad || 0)} und.
                           </p>
                         )}
                       </div>

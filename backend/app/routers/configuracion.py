@@ -73,6 +73,24 @@ def leer_configuracion(
     return parametros
 
 
+# Lo que hace falta para pintar la pantalla de acceso. No son secretos: son el
+# nombre, el logo y los colores que el comercio muestra en su vidriera. El
+# resto de la configuración (impuestos, topes, métodos de pago) sigue pidiendo
+# sesión.
+CLAVES_DE_MARCA = ("negocio_nombre", "marca_logo_url", "marca_color_primario", "marca_color_acento")
+
+
+@router.get("/marca")
+def leer_marca(db: Session = Depends(database.get_db)):
+    """Marca del comercio, sin necesidad de haber entrado.
+
+    Sin esto, un dispositivo que nunca inició sesión muestra el nombre y los
+    colores por defecto justo en la primera pantalla que se ve.
+    """
+    config = obtener_config(db)
+    return {clave: config.get(clave) for clave in CLAVES_DE_MARCA}
+
+
 @router.get("/categorias")
 def leer_categorias(current_user: models.Usuario = Depends(dependencies.get_current_active_user)):
     return CATEGORIAS

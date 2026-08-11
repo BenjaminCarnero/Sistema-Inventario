@@ -16,6 +16,13 @@
       "url": "https://localhost:5173"
     },
     {
+      "name": "frontend-debug",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["G:/Proyectos/SistemaInventarios/frontend/scripts/servidor.mjs"],
+      "port": 5174,
+      "autoPort": true
+    },
+    {
       "name": "backend-api",
       "runtimeExecutable": "G:/Proyectos/SistemaInventarios/backend/venv/Scripts/python.exe",
       "runtimeArgs": ["-m", "uvicorn", "app.main:app", "--app-dir", "backend", "--port", "8001"],

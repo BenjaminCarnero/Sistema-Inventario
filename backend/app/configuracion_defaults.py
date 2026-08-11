@@ -11,10 +11,6 @@ operar en otro país.
 
 DEFAULTS = {
     # ---- Marca (white-label) ----
-    "app_nombre": {
-        "valor": "APPLIFY POS", "tipo": "string", "categoria": "marca",
-        "descripcion": "Nombre de la aplicación: se usa en la pestaña del navegador y al instalarla",
-    },
     "marca_logo_url": {
         "valor": "", "tipo": "string", "categoria": "marca",
         "descripcion": "URL del logo del comercio. Si se deja vacío se usa el ícono por defecto. Ideal: PNG o SVG cuadrado.",

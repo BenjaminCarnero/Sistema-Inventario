@@ -33,7 +33,6 @@ const TITULOS: Record<string, string> = {
 };
 
 const ETIQUETAS: Record<string, string> = {
-  app_nombre: 'Nombre de la aplicación',
   marca_logo_url: 'Logo',
   marca_color_primario: 'Color principal',
   marca_color_acento: 'Color de acento',

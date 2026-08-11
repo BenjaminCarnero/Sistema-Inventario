@@ -283,6 +283,13 @@ export const api = {
     return res.json();
   },
 
+  /** Marca del comercio, sin necesidad de estar logueado. */
+  async getMarca() {
+    const res = await fetch(`${API_URL}/configuracion/marca`);
+    if (!res.ok) throw await this.errorDe(res, 'Error obteniendo la marca');
+    return this.parseJson(res, 'Error obteniendo la marca');
+  },
+
   async getConfiguracion() {
     const res = await fetch(`${API_URL}/configuracion/`, { headers: this.headers });
     if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }

@@ -29,20 +29,33 @@ body {
 }
 
 @layer components {
+  /* Estas clases se usan en más de cien elementos a la vez.
+   *
+   * Antes llevaban `backdrop-blur`, que obliga al navegador a recalcular el
+   * desenfoque de todo lo que hay detrás de cada elemento en cada cuadro. Con
+   * esta cantidad tira los fps al piso, sobre todo en un celular, y encima
+   * casi no se nota: el fondo es oscuro y liso.
+   *
+   * El desenfoque queda sólo para los overlays, que son dos o tres y sí tapan
+   * contenido. El aspecto es prácticamente el mismo.
+   */
   .glass {
-    @apply backdrop-blur-xl bg-white/5 border border-white/15 shadow-lg;
+    @apply bg-neutral-bg2/80 border border-white/15 shadow-lg;
   }
   .glass-card {
-    @apply backdrop-blur-xl bg-white/5 border border-white/15 rounded-2xl shadow-xl shadow-black/20 transition-all duration-300;
+    @apply bg-neutral-bg2/80 border border-white/15 rounded-2xl shadow-xl shadow-black/20;
+    /* `transition-all` hace que el navegador vigile todas las propiedades
+     * animables; alcanza con las dos que realmente cambian al pasar el mouse. */
+    @apply transition-[background-color,border-color] duration-200;
   }
   .glass-card:hover {
-    @apply border-white/25 bg-white/10 shadow-glow;
+    @apply border-white/25 bg-neutral-bg3/80;
   }
   .glass-input {
-    @apply backdrop-blur-md bg-black/20 border border-white/15 focus:border-brand focus:bg-black/40 outline-none text-text-primary placeholder:text-text-muted transition-all duration-300 focus:shadow-glow;
+    @apply bg-black/30 border border-white/15 focus:border-brand focus:bg-black/50 outline-none text-text-primary placeholder:text-text-muted transition-colors duration-200;
   }
   .btn-primary {
-    @apply bg-brand hover:bg-brand-hover text-white font-bold rounded-xl transition-all duration-300 hover:shadow-glow hover:-translate-y-1 active:translate-y-0 disabled:bg-neutral-bg4 disabled:text-text-muted disabled:shadow-none disabled:transform-none;
+    @apply bg-brand hover:bg-brand-hover text-white font-bold rounded-xl transition-colors duration-200 disabled:bg-neutral-bg4 disabled:text-text-muted;
   }
 }
 
