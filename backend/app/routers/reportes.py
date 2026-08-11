@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, time, timedelta, timezone
 from typing import List, Optional
 from app import models, schemas, database, dependencies
 
@@ -13,16 +13,49 @@ get_admin_user = dependencies.require_role(
 )
 
 
+def rango_local_en_utc(desde: date, hasta: date) -> tuple[datetime, datetime]:
+    """Convierte días del calendario del local a un rango en UTC.
+
+    Las fechas se guardan en UTC, pero un día para el comercio es el día de su
+    reloj de pared. Comparando la fecha guardada contra la fecha local, después
+    de las 21:00 en Argentina las dos dejan de coincidir y la recaudación del
+    día pasaba a mostrar cero: justo en el horario en que más se vende.
+
+    El rango es semiabierto (incluye `desde`, excluye el día siguiente a
+    `hasta`) y permite usar el índice de la columna, en vez de calcular una
+    función sobre cada fila.
+    """
+    inicio = datetime.combine(desde, time.min).astimezone(timezone.utc).replace(tzinfo=None)
+    fin = (datetime.combine(hasta, time.min) + timedelta(days=1)) \
+        .astimezone(timezone.utc).replace(tzinfo=None)
+    return inicio, fin
+
+
+def dia_local_en_utc(dias_atras: int = 0) -> tuple[datetime, datetime]:
+    """Rango en UTC del día local de hoy, o de hace tantos días."""
+    dia = date.today() - timedelta(days=dias_atras)
+    return rango_local_en_utc(dia, dia)
+
+
+def fecha_local_de(momento_utc: datetime) -> date:
+    """Con qué día del local se corresponde un instante guardado en UTC."""
+    return momento_utc.replace(tzinfo=timezone.utc).astimezone().date()
+
+
 @router.get("/kpi", response_model=schemas.KpiResponse)
 def get_kpi(db: Session = Depends(database.get_db), current_user: models.Usuario = Depends(get_admin_user)):
-    hoy = date.today()
+    inicio, fin = dia_local_en_utc()
 
-    ventas_hoy = db.query(models.Venta).filter(func.date(models.Venta.fecha_hora) == hoy).all()
+    ventas_hoy = db.query(models.Venta).filter(
+        models.Venta.fecha_hora >= inicio,
+        models.Venta.fecha_hora < fin,
+    ).all()
 
     # Se descuenta lo devuelto hoy: la recaudación real es lo que quedó en caja,
     # no lo que se facturó antes de las devoluciones.
     devuelto_hoy = db.query(func.sum(models.Devolucion.total_devuelto)).filter(
-        func.date(models.Devolucion.fecha_hora) == hoy
+        models.Devolucion.fecha_hora >= inicio,
+        models.Devolucion.fecha_hora < fin,
     ).scalar() or 0.0
 
     total_recaudado = sum(v.total for v in ventas_hoy) - devuelto_hoy
@@ -151,9 +184,8 @@ def get_ventas_periodo(
     if desde > hasta:
         raise HTTPException(status_code=400, detail="'desde' no puede ser posterior a 'hasta'")
 
-    # hasta es inclusive: comparamos contra el inicio del día siguiente
-    limite = datetime.combine(hasta, datetime.min.time()) + timedelta(days=1)
-    inicio = datetime.combine(desde, datetime.min.time())
+    # Los días son los del calendario del local; la base guarda UTC
+    inicio, limite = rango_local_en_utc(desde, hasta)
 
     query = db.query(models.Venta).filter(
         models.Venta.fecha_hora >= inicio,
@@ -268,14 +300,22 @@ def get_ventas_por_dia(
     hoy = date.today()
     inicio = hoy - timedelta(days=dias - 1)
 
-    filas = db.query(
-        func.date(models.Venta.fecha_hora).label("dia"),
-        func.sum(models.Venta.total).label("total"),
-        func.count(models.Venta.id).label("cantidad"),
-    ).filter(func.date(models.Venta.fecha_hora) >= inicio)\
-     .group_by("dia").all()
+    desde_utc, hasta_utc = rango_local_en_utc(inicio, hoy)
 
-    por_dia = {str(f.dia): {"total": f.total or 0.0, "cantidad": f.cantidad or 0} for f in filas}
+    # Se agrupa en Python y no con func.date(): la base guarda UTC, así que
+    # agrupar por la fecha guardada corre las ventas de la noche al día
+    # siguiente. Para el rango que muestra el gráfico el volumen es chico.
+    ventas = db.query(models.Venta.fecha_hora, models.Venta.total).filter(
+        models.Venta.fecha_hora >= desde_utc,
+        models.Venta.fecha_hora < hasta_utc,
+    ).all()
+
+    por_dia: dict[str, dict] = {}
+    for fecha_hora, total in ventas:
+        clave = fecha_local_de(fecha_hora).isoformat()
+        acumulado = por_dia.setdefault(clave, {"total": 0.0, "cantidad": 0})
+        acumulado["total"] += total or 0.0
+        acumulado["cantidad"] += 1
 
     serie = []
     for i in range(dias):

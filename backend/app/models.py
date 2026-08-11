@@ -262,6 +262,47 @@ class CajaTurno(Base):
     usuario = relationship("Usuario", back_populates="cajas")
 
 
+class Auditoria(Base):
+    """Quién cambió qué, cuándo, y de qué valor a qué valor.
+
+    El stock ya tenía su historial, pero los pesos no: cambiar un precio, un
+    descuento o el IVA no dejaba rastro. Eso permite bajar un precio, vender y
+    volver a subirlo sin que nadie se entere, que es el fraude interno clásico.
+    """
+    __tablename__ = "auditoria"
+
+    id = Column(Integer, primary_key=True, index=True)
+    usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=True)
+    fecha_hora = Column(DateTime(timezone=True), default=ahora_utc, index=True)
+    # Qué se tocó: "producto", "descuento", "configuracion", "usuario"…
+    entidad = Column(String(40), nullable=False, index=True)
+    entidad_id = Column(Integer, nullable=True)
+    # Cómo quedó identificado en la pantalla, para no depender de que el
+    # registro siga existiendo cuando se lea la auditoría
+    entidad_nombre = Column(String(150), nullable=True)
+    accion = Column(String(20), nullable=False)  # CREAR, MODIFICAR, ELIMINAR
+    campo = Column(String(60), nullable=True)
+    # Texto y no un tipo específico: acá conviven precios, banderas y textos
+    valor_anterior = Column(Text, nullable=True)
+    valor_nuevo = Column(Text, nullable=True)
+
+    usuario = relationship("Usuario")
+
+
+class IntentoLogin(Base):
+    """Intentos fallidos de acceso.
+
+    Antes vivían en un diccionario en memoria: reiniciar el servidor borraba el
+    contador, y en desarrollo el servidor se reinicia solo al tocar un archivo.
+    Guardados acá, el freno sobrevive al reinicio.
+    """
+    __tablename__ = "intentos_login"
+
+    id = Column(Integer, primary_key=True, index=True)
+    usuario = Column(String(100), nullable=False, index=True)
+    fecha_hora = Column(DateTime(timezone=True), default=ahora_utc, index=True)
+
+
 class Configuracion(Base):
     """Configuración del sistema como clave-valor tipado.
 

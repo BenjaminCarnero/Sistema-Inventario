@@ -2,7 +2,8 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app import models, schemas, database, dependencies
+from app import models, schemas, database, dependencies, auditoria
+from app.routers.configuracion import obtener_config
 
 router = APIRouter(prefix="/devoluciones", tags=["devoluciones"])
 
@@ -176,6 +177,28 @@ def crear_devolucion(
         bruto_venta = sum(d.cantidad * d.precio_unitario for d in venta.detalles) or 1
         factor = venta.total / bruto_venta
 
+        # Devolver es sacar plata de la caja. Por encima del tope hace falta un
+        # administrador: el encargado resuelve el día a día, pero una
+        # devolución grande deja de ser una decisión de mostrador.
+        #
+        # Se verifica antes de tocar el stock. Podría confiarse en que el
+        # rollback deshaga lo hecho, pero rechazar algo después de haberlo
+        # aplicado a medias es la clase de código que un día falla mal.
+        a_devolver = round(sum(
+            round(cantidad * vendido[producto_id]["precio"] * factor, 2)
+            for producto_id, cantidad in pedido
+        ), 2)
+
+        tope = float(obtener_config(db).get("devolucion_tope_encargado") or 0)
+        if tope > 0 and current_user.rol_id != models.RolEnum.ADMIN.value and a_devolver > tope:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    f"Una devolución de {a_devolver:.2f} supera el tope de {tope:.2f} "
+                    "para tu rol. La tiene que hacer un administrador."
+                ),
+            )
+
         devolucion = models.Devolucion(
             venta_id=venta.id,
             usuario_id=current_user.id,
@@ -217,6 +240,12 @@ def crear_devolucion(
             ))
 
         devolucion.total_devuelto = round(total_devuelto, 2)
+
+        auditoria.registrar(
+            db, current_user, "devolucion", "CREAR",
+            entidad_id=devolucion.id, entidad_nombre=f"Venta #{venta.id}",
+            campo="total_devuelto", valor_nuevo=devolucion.total_devuelto,
+        )
 
         # Estado de la venta: anulada si ya no queda nada, parcial si queda algo
         devuelto_final = _devuelto_por_producto(db, venta_id)

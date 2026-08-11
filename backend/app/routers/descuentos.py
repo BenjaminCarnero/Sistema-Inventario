@@ -2,7 +2,7 @@ from typing import List
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from app import models, schemas, database, dependencies
+from app import models, schemas, database, dependencies, auditoria
 
 router = APIRouter(prefix="/descuentos", tags=["descuentos"])
 
@@ -68,6 +68,14 @@ def create_descuento(
 
     nuevo = models.Descuento(**descuento.model_dump())
     db.add(nuevo)
+    db.flush()
+
+    auditoria.registrar(
+        db, current_user, "descuento", "CREAR",
+        entidad_id=nuevo.id, entidad_nombre=nuevo.nombre,
+        campo="valor", valor_nuevo=f"{nuevo.valor} ({nuevo.tipo})",
+    )
+
     db.commit()
     db.refresh(nuevo)
     return nuevo
@@ -99,6 +107,11 @@ def update_descuento(
         fecha_fin=cambios.get("fecha_fin", db_descuento.fecha_fin),
     ))
 
+    auditoria.registrar_cambios(
+        db, current_user, "descuento", db_descuento, cambios,
+        entidad_nombre=db_descuento.nombre,
+    )
+
     for key, value in cambios.items():
         setattr(db_descuento, key, value)
 
@@ -120,6 +133,12 @@ def delete_descuento(
     # Si ya se usó en alguna venta lo desactivamos en vez de borrarlo,
     # para no romper el historial de reportes.
     usado = db.query(models.Venta).filter(models.Venta.descuento_id == descuento_id).first()
+    auditoria.registrar(
+        db, current_user, "descuento", "ELIMINAR",
+        entidad_id=db_descuento.id, entidad_nombre=db_descuento.nombre,
+        valor_anterior=f"{db_descuento.valor} ({db_descuento.tipo})",
+    )
+
     if usado:
         db_descuento.activo = False
         db.commit()

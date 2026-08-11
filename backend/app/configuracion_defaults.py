@@ -108,6 +108,10 @@ DEFAULTS = {
         "valor": "Hola, te hago un pedido:", "tipo": "string", "categoria": "reposicion",
         "descripcion": "Con qué empieza el mensaje que se le manda al proveedor. Adelante va el nombre del negocio.",
     },
+    "devolucion_tope_encargado": {
+        "valor": "0", "tipo": "number", "categoria": "reposicion",
+        "descripcion": "Monto máximo que un encargado puede devolver de una vez sin un administrador. En cero no hay tope. Devolver es sacar plata de la caja.",
+    },
     "pedido_despedida": {
         "valor": "¡Gracias!", "tipo": "string", "categoria": "reposicion",
         "descripcion": "Con qué termina el mensaje al proveedor",

@@ -25,7 +25,7 @@ class TestAltaDeUsuarios:
         """Excepción necesaria para poder inicializar una instalación nueva."""
         assert db.query(models.Usuario).count() == 0
         r = client.post("/auth/register", json={
-            "nombre": "primero", "pin_acceso": "1234", "rol_id": 1, "estado": True,
+            "nombre": "primero", "pin_acceso": "unaClaveLarga", "rol_id": 1, "estado": True,
         })
         assert r.status_code == 201
 

@@ -30,10 +30,9 @@ def db():
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
 
-    # El anti fuerza bruta guarda los intentos en un diccionario de módulo, o
-    # sea que sobrevive entre tests: sin esto, el test que agota los intentos
-    # deja bloqueado al usuario "admin" para todos los que corren después.
-    auth._intentos.clear()
+    # Los intentos fallidos ahora viven en la base, así que se van con el
+    # drop_all de arriba: el test que agota los intentos ya no deja bloqueado
+    # al usuario "admin" para los que corren después.
 
     sesion = SessionLocal()
     try:

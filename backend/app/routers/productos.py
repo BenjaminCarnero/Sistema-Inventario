@@ -1,7 +1,7 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from app import models, schemas, database, dependencies
+from app import models, schemas, database, dependencies, auditoria
 
 router = APIRouter(prefix="/productos", tags=["productos"])
 
@@ -80,6 +80,14 @@ def create_producto(
 
     new_producto = models.Producto(**producto.model_dump())
     db.add(new_producto)
+    db.flush()
+
+    auditoria.registrar(
+        db, current_user, "producto", "CREAR",
+        entidad_id=new_producto.id, entidad_nombre=new_producto.nombre,
+        campo="precio_venta", valor_nuevo=new_producto.precio_venta,
+    )
+
     db.commit()
     db.refresh(new_producto)
     return new_producto
@@ -110,6 +118,12 @@ def update_producto(
         ).first()
         if repetido:
             raise HTTPException(status_code=400, detail="Ya existe otro producto con ese código de barras")
+
+    # Se compara antes de tocar nada: después ya no se sabe qué había
+    auditoria.registrar_cambios(
+        db, current_user, "producto", db_producto, update_data,
+        entidad_nombre=db_producto.nombre,
+    )
 
     for key, value in update_data.items():
         setattr(db_producto, key, value)

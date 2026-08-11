@@ -376,3 +376,26 @@ class Pedido(BaseModel):
     notas: Optional[str] = None
     detalles: List[DetallePedido]
     model_config = ConfigDict(from_attributes=True)
+
+
+# ---- Auditoría y respaldos -------------------------------------------------
+
+class EntradaAuditoria(BaseModel):
+    id: int
+    usuario_id: Optional[int] = None
+    usuario_nombre: Optional[str] = None
+    fecha_hora: datetime
+    entidad: str
+    entidad_id: Optional[int] = None
+    entidad_nombre: Optional[str] = None
+    accion: str
+    campo: Optional[str] = None
+    valor_anterior: Optional[str] = None
+    valor_nuevo: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
+class Respaldo(BaseModel):
+    nombre: str
+    bytes: int
+    fecha_hora: datetime

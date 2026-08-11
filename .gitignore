@@ -53,3 +53,6 @@ frontend/certs/
 
 # Herramientas descargadas (pnpm)
 .tools/
+
+# Copias de la base: traen las ventas y los PIN hasheados
+backend/respaldos/

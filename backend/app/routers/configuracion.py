@@ -4,7 +4,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app import models, database, dependencies
+from app import models, database, dependencies, auditoria
+
+
+def _resumir(valor: str, maximo: int = 120) -> str:
+    """Acorta los valores largos para que la auditoría siga siendo legible."""
+    if valor is None:
+        return None
+    if len(valor) <= maximo:
+        return valor
+    return f"{valor[:maximo]}… ({len(valor)} caracteres)"
 from app.configuracion_defaults import DEFAULTS, CATEGORIAS, castear, serializar
 
 router = APIRouter(prefix="/configuracion", tags=["configuracion"])
@@ -150,6 +159,8 @@ def actualizar_configuracion(
         texto = serializar(valor, meta["tipo"])
 
         fila = db.query(models.Configuracion).filter(models.Configuracion.clave == clave).first()
+        anterior = fila.valor if fila is not None else meta["valor"]
+
         if fila is None:
             fila = models.Configuracion(
                 clave=clave,
@@ -161,6 +172,15 @@ def actualizar_configuracion(
             db.add(fila)
         else:
             fila.valor = texto
+
+        # El logo puede ser una imagen embebida de cientos de miles de
+        # caracteres: guardar eso en la auditoría la volvería inservible.
+        if anterior != texto:
+            auditoria.registrar(
+                db, current_user, "configuracion", "MODIFICAR",
+                entidad_nombre=clave, campo=clave,
+                valor_anterior=_resumir(anterior), valor_nuevo=_resumir(texto),
+            )
 
     db.commit()
     return leer_configuracion(db=db, current_user=current_user)

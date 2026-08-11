@@ -1,7 +1,9 @@
+import sys
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from app import models, schemas, database, dependencies
+from app import models, schemas, database, dependencies, respaldos
 from app.routers.configuracion import obtener_config
 
 router = APIRouter(prefix="/cajas", tags=["cajas"])
@@ -111,4 +113,13 @@ def cerrar_caja(
 
     db.commit()
     db.refresh(caja)
+
+    # El cierre de caja es el punto natural para respaldar: pasa una vez por
+    # turno y marca el final de una jornada de datos. Si la copia falla, el
+    # cierre igual quedó hecho: perder el respaldo no puede trabar el negocio.
+    try:
+        respaldos.crear("cierre_caja")
+    except Exception as e:
+        print(f"[AVISO] No se pudo respaldar la base al cerrar caja: {e}", file=sys.stderr)
+
     return caja

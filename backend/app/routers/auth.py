@@ -3,14 +3,26 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from app import models, schemas, auth, database, dependencies
+from app import models, schemas, auth, database, dependencies, auditoria
 from app.config import settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 get_admin_user = dependencies.require_role([models.RolEnum.ADMIN.value])
 
+# El cajero teclea su PIN decenas de veces por turno y en un mostrador: cuatro
+# dígitos es un compromiso razonable. El administrador cambia precios, borra
+# usuarios y descarga la base entera, así que se le exige más.
 PIN_MINIMO = 4
+PIN_MINIMO_POR_ROL = {
+    models.RolEnum.ADMIN.value: 8,
+    models.RolEnum.ENCARGADO.value: 6,
+    models.RolEnum.CAJERO.value: 4,
+}
+
+
+def _pin_minimo(rol_id: int) -> int:
+    return PIN_MINIMO_POR_ROL.get(rol_id, PIN_MINIMO)
 
 
 @router.post("/login", response_model=schemas.Token)
@@ -20,7 +32,7 @@ def login_for_access_token(
     db: Session = Depends(database.get_db),
 ):
     ip = request.client.host if request.client else "desconocida"
-    bloqueo = auth.segundos_de_bloqueo(form_data.username, ip)
+    bloqueo = auth.segundos_de_bloqueo(db, form_data.username, ip)
     if bloqueo:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -30,7 +42,7 @@ def login_for_access_token(
     user = db.query(models.Usuario).filter(models.Usuario.nombre == form_data.username).first()
 
     if not user or not auth.verify_password(form_data.password, user.pin_acceso):
-        auth.registrar_intento_fallido(form_data.username, ip)
+        auth.registrar_intento_fallido(db, form_data.username, ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             # Mensaje genérico a propósito: no revela si el usuario existe
@@ -40,13 +52,13 @@ def login_for_access_token(
 
     # Una cuenta dada de baja no debe poder iniciar sesión
     if not user.estado:
-        auth.registrar_intento_fallido(form_data.username, ip)
+        auth.registrar_intento_fallido(db, form_data.username, ip)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="La cuenta está desactivada",
         )
 
-    auth.limpiar_intentos(form_data.username, ip)
+    auth.limpiar_intentos(db, form_data.username, ip)
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = auth.create_access_token(
         data={"sub": user.nombre, "rol": user.rol_id}, expires_delta=access_token_expires
@@ -87,10 +99,11 @@ def register_user(
     if not nombre:
         raise HTTPException(status_code=400, detail="El nombre de usuario no puede estar vacío")
 
-    if len(user.pin_acceso or "") < PIN_MINIMO:
+    minimo = _pin_minimo(user.rol_id)
+    if len(user.pin_acceso or "") < minimo:
         raise HTTPException(
             status_code=400,
-            detail=f"El PIN debe tener al menos {PIN_MINIMO} caracteres",
+            detail=f"El PIN debe tener al menos {minimo} caracteres para este rol",
         )
 
     if user.rol_id not in (r.value for r in models.RolEnum):
@@ -161,6 +174,12 @@ def update_user(
     if repetido:
         raise HTTPException(status_code=400, detail="Ese nombre de usuario ya existe")
 
+    auditoria.registrar_cambios(
+        db, current_user, "usuario", db_user,
+        {"rol_id": user_update.rol_id, "estado": user_update.estado},
+        entidad_nombre=db_user.nombre,
+    )
+
     db_user.nombre = nombre
     db_user.rol_id = user_update.rol_id
     db_user.estado = user_update.estado
@@ -187,6 +206,12 @@ def delete_user(
             status_code=400,
             detail="No podés eliminar al último administrador: el sistema quedaría sin acceso.",
         )
+
+    auditoria.registrar(
+        db, current_user, "usuario", "ELIMINAR",
+        entidad_id=db_user.id, entidad_nombre=db_user.nombre,
+        campo="estado", valor_anterior=db_user.estado, valor_nuevo=False,
+    )
 
     # Baja lógica: las ventas pasadas siguen refiriendo a este usuario
     db_user.estado = False
