@@ -18,6 +18,31 @@ gestor_devoluciones = dependencies.require_role(
 METODOS_VALIDOS = {m.value for m in models.MetodoPagoEnum} | {"MERCADOPAGO"}
 
 
+def _caja_de_la_que_sale(db: Session, usuario: models.Usuario) -> int | None:
+    """De qué turno de caja sale la plata de esta devolución.
+
+    Las devoluciones las autoriza un encargado, que muchas veces no tiene caja
+    propia abierta: la plata sale igual del cajón que está funcionando. Por eso
+    se busca primero la caja del que la registra y, si no tiene, la única que
+    esté abierta.
+
+    Con varias cajas abiertas y sin una propia no hay forma de adivinar cuál
+    es, así que queda en None y el arqueo vuelve a contarla por ventana de
+    tiempo, como se hacía antes.
+    """
+    propia = db.query(models.CajaTurno).filter(
+        models.CajaTurno.usuario_id == usuario.id,
+        models.CajaTurno.fecha_cierre == None,  # noqa: E711
+    ).first()
+    if propia:
+        return propia.id
+
+    abiertas = db.query(models.CajaTurno).filter(
+        models.CajaTurno.fecha_cierre == None,  # noqa: E711
+    ).limit(2).all()
+    return abiertas[0].id if len(abiertas) == 1 else None
+
+
 def _devuelto_por_producto(db: Session, venta_id: int) -> dict[int, int]:
     """Cuántas unidades de cada producto ya se devolvieron de esta venta."""
     filas = db.query(
@@ -209,6 +234,7 @@ def crear_devolucion(
             total_devuelto=0,
             es_anulacion=not payload.detalles,
             metodo_devolucion=payload.metodo_devolucion,
+            caja_turno_id=_caja_de_la_que_sale(db, current_user),
         )
         db.add(devolucion)
         db.flush()

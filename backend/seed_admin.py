@@ -15,7 +15,11 @@ from sqlalchemy.orm import Session
 from app import auth, models
 from app.database import SessionLocal
 
-PIN_MINIMO = 4
+# El mínimo sale de la misma política que aplica la API. Estaba fijo en 4 acá,
+# así que el primer administrador —la cuenta más privilegiada del sistema, y la
+# única que existe en toda instalación nueva— era también la única que podía
+# saltarse el mínimo de 8 que se les exige a los demás.
+PIN_MINIMO = auth.pin_minimo(models.RolEnum.ADMIN.value)
 
 
 def crear_admin():

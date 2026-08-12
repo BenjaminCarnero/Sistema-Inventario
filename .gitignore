@@ -9,6 +9,9 @@
 # Un PIN de 4 dígitos se rompe en segundos si el hash es público.
 *.db
 *.db-journal
+# WAL deja estos dos archivos al lado de la base mientras está en uso
+*.db-wal
+*.db-shm
 *.sqlite
 *.sqlite3
 # Copias hechas a mano antes de migrar: "applify.db.antes-de-xxxx" y parecidas.

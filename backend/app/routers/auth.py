@@ -10,19 +10,10 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 get_admin_user = dependencies.require_role([models.RolEnum.ADMIN.value])
 
-# El cajero teclea su PIN decenas de veces por turno y en un mostrador: cuatro
-# dígitos es un compromiso razonable. El administrador cambia precios, borra
-# usuarios y descarga la base entera, así que se le exige más.
-PIN_MINIMO = 4
-PIN_MINIMO_POR_ROL = {
-    models.RolEnum.ADMIN.value: 8,
-    models.RolEnum.ENCARGADO.value: 6,
-    models.RolEnum.CAJERO.value: 4,
-}
-
-
-def _pin_minimo(rol_id: int) -> int:
-    return PIN_MINIMO_POR_ROL.get(rol_id, PIN_MINIMO)
+# La política de largo mínimo vive en `app/auth.py`, que es lo que también usa
+# el script de instalación: tenerla acá dejaba crear el primer administrador
+# con un PIN de cuatro caracteres.
+_pin_minimo = auth.pin_minimo
 
 
 @router.post("/login", response_model=schemas.Token)

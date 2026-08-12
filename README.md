@@ -338,6 +338,8 @@ Además:
   cada cierre de caja, pero esa copia vive en el mismo disco que la base y no
   sirve si ese disco se rompe. Con esto queda además un duplicado en una
   carpeta sincronizada o en un pendrive.
+- **Probá una restauración antes de necesitarla.** Un respaldo que nadie probó
+  restaurar no es un respaldo. Ver abajo.
 - Mirá `backend/logs/` cuando algo falle: ahí quedan los errores del servidor.
   Antes salían por consola y se perdían.
 - Para varias cajas en simultáneo conviene pasar a SQL Server o PostgreSQL
@@ -387,6 +389,24 @@ rechazó.
 cd frontend
 pnpm test
 ```
+
+### Restaurar un respaldo
+
+Se hace con el backend **detenido**: la base está en modo WAL y reemplazar el
+archivo mientras alguien escribe deja un revoltijo.
+
+```bash
+cd backend
+venv\Scripts\activate
+
+python restaurar_respaldo.py                     # muestra las copias disponibles
+python restaurar_respaldo.py applify_2026....db  # restaura esa
+```
+
+Antes de tocar nada verifica que la copia se abra, que tenga las tablas del
+sistema y te dice cuántas ventas trae, para que compares con lo que esperabas.
+La base que estaba en uso se guarda al lado con el sufijo `.reemplazada_<fecha>`,
+así que si te equivocaste de copia todavía hay marcha atrás.
 
 ### Qué NO subir nunca al repositorio
 

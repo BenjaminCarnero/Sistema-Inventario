@@ -1,18 +1,11 @@
-from datetime import datetime, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app import models, schemas, database, dependencies
+from app.fechas import filtro_de_dias
 
 router = APIRouter(prefix="/stock", tags=["stock"])
-
-
-def _dia(texto: str) -> datetime:
-    try:
-        return datetime.strptime(texto, "%Y-%m-%d")
-    except ValueError:
-        raise HTTPException(status_code=400, detail="La fecha debe tener el formato YYYY-MM-DD")
 
 # Mover stock cambia el inventario y la rentabilidad: no es tarea del cajero.
 gestor_stock = dependencies.require_role(
@@ -51,14 +44,23 @@ def registrar_movimiento(
 
     producto = db.query(models.Producto).filter(
         models.Producto.id == payload.producto_id
-    ).with_for_update().first()
+    ).first()
     if not producto:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
 
     anterior = producto.stock_actual or 0
 
     if payload.tipo_movimiento == models.TipoMovimientoEnum.INGRESO.value:
-        producto.stock_actual = anterior + payload.cantidad
+        # La suma la hace la base y no Python. Acá había un `with_for_update()`
+        # que SQLite descarta en silencio, así que dos ingresos simultáneos del
+        # mismo producto leían el mismo stock y se pisaban: entraban dos cajas
+        # de mercadería y el sistema sumaba una.
+        db.query(models.Producto).filter(
+            models.Producto.id == payload.producto_id
+        ).update(
+            {models.Producto.stock_actual: models.Producto.stock_actual + payload.cantidad},
+            synchronize_session=False,
+        )
         cantidad_registrada = payload.cantidad
         motivo = (payload.motivo or "").strip() or "Ingreso de mercadería"
     else:
@@ -114,11 +116,13 @@ def historial_movimientos(
             raise HTTPException(status_code=400, detail="Tipo de movimiento desconocido")
         query = query.filter(models.MovimientoStock.tipo_movimiento == tipo)
 
-    # Las fechas llegan como día suelto; `hasta` incluye el día entero
-    if desde:
-        query = query.filter(models.MovimientoStock.fecha_hora >= _dia(desde))
-    if hasta:
-        query = query.filter(models.MovimientoStock.fecha_hora < _dia(hasta) + timedelta(days=1))
+    # Las fechas llegan como día del calendario del local y la columna está en
+    # UTC. Sin convertir, "desde hoy" traía también lo de ayer a la noche.
+    inicio, fin = filtro_de_dias(desde, hasta)
+    if inicio is not None:
+        query = query.filter(models.MovimientoStock.fecha_hora >= inicio)
+    if fin is not None:
+        query = query.filter(models.MovimientoStock.fecha_hora < fin)
 
     movimientos = query.order_by(models.MovimientoStock.id.desc()).limit(limite).all()
 

@@ -176,6 +176,10 @@ class Devolucion(Base):
     es_anulacion = Column(Boolean, default=False)
     # Cómo se le devolvió la plata al cliente: importa para el arqueo de caja
     metodo_devolucion = Column(String(50), default=MetodoPagoEnum.EFECTIVO.value)
+    # De qué cajón salió la plata. Sin esto, el arqueo restaba toda devolución
+    # hecha dentro de la ventana del turno, así que con dos cajas abiertas la
+    # misma devolución le daba faltante a las dos.
+    caja_turno_id = Column(Integer, ForeignKey("cajas_turnos.id"), nullable=True, index=True)
 
     venta = relationship("Venta", back_populates="devoluciones")
     detalles = relationship("DetalleDevolucion", back_populates="devolucion", cascade="all, delete-orphan")

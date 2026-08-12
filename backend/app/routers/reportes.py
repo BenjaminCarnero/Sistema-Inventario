@@ -4,6 +4,9 @@ from sqlalchemy import func, desc
 from datetime import datetime, date, time, timedelta, timezone
 from typing import List, Optional
 from app import models, schemas, database, dependencies
+# Los helpers de fecha viven en `app/fechas.py`: estaban acá y por eso el
+# arreglo de zona horaria no había llegado a stock ni a auditoría.
+from app.fechas import rango_local_en_utc, dia_local_en_utc, fecha_local_de  # noqa: F401
 
 router = APIRouter(prefix="/reportes", tags=["reportes"])
 
@@ -11,35 +14,6 @@ router = APIRouter(prefix="/reportes", tags=["reportes"])
 gestor_reportes = dependencies.require_role(
     [models.RolEnum.ADMIN.value, models.RolEnum.ENCARGADO.value]
 )
-
-
-def rango_local_en_utc(desde: date, hasta: date) -> tuple[datetime, datetime]:
-    """Convierte días del calendario del local a un rango en UTC.
-
-    Las fechas se guardan en UTC, pero un día para el comercio es el día de su
-    reloj de pared. Comparando la fecha guardada contra la fecha local, después
-    de las 21:00 en Argentina las dos dejan de coincidir y la recaudación del
-    día pasaba a mostrar cero: justo en el horario en que más se vende.
-
-    El rango es semiabierto (incluye `desde`, excluye el día siguiente a
-    `hasta`) y permite usar el índice de la columna, en vez de calcular una
-    función sobre cada fila.
-    """
-    inicio = datetime.combine(desde, time.min).astimezone(timezone.utc).replace(tzinfo=None)
-    fin = (datetime.combine(hasta, time.min) + timedelta(days=1)) \
-        .astimezone(timezone.utc).replace(tzinfo=None)
-    return inicio, fin
-
-
-def dia_local_en_utc(dias_atras: int = 0) -> tuple[datetime, datetime]:
-    """Rango en UTC del día local de hoy, o de hace tantos días."""
-    dia = date.today() - timedelta(days=dias_atras)
-    return rango_local_en_utc(dia, dia)
-
-
-def fecha_local_de(momento_utc: datetime) -> date:
-    """Con qué día del local se corresponde un instante guardado en UTC."""
-    return momento_utc.replace(tzinfo=timezone.utc).astimezone().date()
 
 
 @router.get("/kpi", response_model=schemas.KpiResponse)

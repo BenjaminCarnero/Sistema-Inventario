@@ -1,10 +1,12 @@
-import sys
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from app import models, schemas, database, dependencies, respaldos
 from app.routers.configuracion import obtener_config
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/cajas", tags=["cajas"])
 
@@ -93,14 +95,22 @@ def cerrar_caja(
     # Lo devuelto en efectivo salió del cajón: sin restarlo, el arqueo daría
     # faltante todos los días en que se hizo una devolución.
     #
-    # Se filtra por ventana de tiempo y no por quién la registró, porque las
-    # devoluciones las autoriza un encargado pero la plata sale del cajón que
-    # está abierto. Con un solo puesto de caja —el caso de un kiosco— esto es
-    # exacto. Con varias cajas abiertas a la vez habría que asociar cada
-    # devolución a un turno concreto.
+    # Cada devolución guarda de qué turno salió la plata. Antes esto se
+    # resolvía por ventana de tiempo, y con dos cajas abiertas a la vez la
+    # misma devolución les daba faltante a las dos.
+    #
+    # Las que quedaron sin turno —las anteriores a este cambio, y las hechas
+    # con varias cajas abiertas por alguien que no tenía la suya— se siguen
+    # contando por ventana de tiempo, que es el comportamiento de siempre.
     devoluciones_efectivo = db.query(func.sum(models.Devolucion.total_devuelto)).filter(
-        models.Devolucion.fecha_hora >= caja.fecha_apertura,
-        models.Devolucion.metodo_devolucion == models.MetodoPagoEnum.EFECTIVO.value
+        models.Devolucion.metodo_devolucion == models.MetodoPagoEnum.EFECTIVO.value,
+        or_(
+            models.Devolucion.caja_turno_id == caja.id,
+            and_(
+                models.Devolucion.caja_turno_id.is_(None),
+                models.Devolucion.fecha_hora >= caja.fecha_apertura,
+            ),
+        ),
     ).scalar() or 0.0
 
     # Diferencia = Declarado - (Inicial + Ventas en efectivo - Devoluciones en efectivo)
@@ -119,7 +129,9 @@ def cerrar_caja(
     # cierre igual quedó hecho: perder el respaldo no puede trabar el negocio.
     try:
         respaldos.crear("cierre_caja")
-    except Exception as e:
-        print(f"[AVISO] No se pudo respaldar la base al cerrar caja: {e}", file=sys.stderr)
+    except Exception:
+        # Al log y no a la consola: este aviso es justamente el que hay que
+        # poder leer después, cuando alguien pregunte por qué no hay respaldos.
+        logger.exception("No se pudo respaldar la base al cerrar caja")
 
     return caja

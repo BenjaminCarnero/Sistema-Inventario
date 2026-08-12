@@ -1,23 +1,16 @@
-from datetime import datetime, timedelta
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app import models, schemas, database, dependencies
+from app.fechas import filtro_de_dias
 
 router = APIRouter(prefix="/auditoria", tags=["auditoria"])
 
 # El registro muestra quién tocó qué. Que lo lea sólo el administrador: un
 # encargado no debería poder revisar si lo están controlando.
 solo_admin = dependencies.require_role([models.RolEnum.ADMIN.value])
-
-
-def _dia(texto: str) -> datetime:
-    try:
-        return datetime.strptime(texto, "%Y-%m-%d")
-    except ValueError:
-        raise HTTPException(status_code=400, detail="La fecha debe tener el formato YYYY-MM-DD")
 
 
 @router.get("/", response_model=List[schemas.EntradaAuditoria])
@@ -36,11 +29,13 @@ def listar_auditoria(
         query = query.filter(models.Auditoria.entidad == entidad)
     if usuario_id:
         query = query.filter(models.Auditoria.usuario_id == usuario_id)
-    if desde:
-        query = query.filter(models.Auditoria.fecha_hora >= _dia(desde))
-    if hasta:
-        # El rango incluye el día final entero
-        query = query.filter(models.Auditoria.fecha_hora < _dia(hasta) + timedelta(days=1))
+    # Días del calendario del local convertidos a UTC, que es como se guardan.
+    # El rango incluye el día final entero.
+    inicio, fin = filtro_de_dias(desde, hasta)
+    if inicio is not None:
+        query = query.filter(models.Auditoria.fecha_hora >= inicio)
+    if fin is not None:
+        query = query.filter(models.Auditoria.fecha_hora < fin)
 
     entradas = query.order_by(models.Auditoria.id.desc()).limit(limite).all()
 

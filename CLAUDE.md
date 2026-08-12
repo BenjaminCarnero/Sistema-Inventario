@@ -67,11 +67,22 @@ tiene que ser a propósito.
   `SECRET_KEY`, si está la clave vieja que quedó en el historial de git, o si
   `CORS_ORIGINS` es `*`.
 - **`with_for_update()` no hace nada en SQLite**: compila a un SELECT pelado.
-  Por eso el descuento de stock en `ventas.py` se hace con un UPDATE relativo
-  (`stock_actual - :n`) y no leyendo y restando en Python.
-- Las fechas se guardan en **UTC** y se muestran en hora local. `reportes.py`
-  tiene los helpers de conversión; un reporte que arma rangos a mano va a dar
-  mal en el borde del día.
+  Por eso el stock se mueve con UPDATE relativos (`stock_actual - :n`) en
+  `ventas.py` y `stock.py`, y no leyendo y restando en Python.
+- Las fechas se guardan en **UTC** y se muestran en hora local. Los helpers
+  están en `app/fechas.py` y hay que usarlos siempre: cuando vivían dentro de
+  `reportes.py`, el historial de stock y la auditoría siguieron filtrando con
+  fechas naive y traían mal el borde del día.
+- La base abre en **WAL** con `busy_timeout` de 10s (`database.py`), que es lo
+  que permite que dos cajas cobren a la vez sin "database is locked". Deja
+  archivos `-wal` y `-shm` al lado de la base: son normales, y hay que borrarlos
+  al reemplazar la base a mano.
+- Las **claves foráneas están activadas**. SQLite las ignora por defecto, así
+  que hay código viejo que puede estar apoyándose en eso: si algo empieza a
+  fallar con "FOREIGN KEY constraint failed", es que siempre estuvo mal.
+- La política de largo del PIN vive en `app/auth.py:pin_minimo` porque la usan
+  el router y `seed_admin.py`. Duplicada, el instalador dejaba crear el primer
+  administrador con un PIN más débil del que exige la API.
 - El freno al login cuenta dos cosas distintas: intentos por cuenta, e
   **cuántas cuentas distintas** se probaron desde una IP. Lo segundo es contra
   el barrido; contar intentos a secas dejaba sin entrar a todo un local detrás
@@ -87,7 +98,9 @@ backend/app/
   models.py      SQLAlchemy. Un cambio acá necesita migración de alembic
   schemas.py     Pydantic (entrada/salida de la API)
   auth.py        hash de PIN, tokens y freno de fuerza bruta
+  fechas.py      conversión entre el día del local y el UTC de la base
   respaldos.py   copias de la base (locales y a la carpeta externa del .env)
+  ../restaurar_respaldo.py   el otro lado: restaura una copia, con el backend parado
 frontend/src/
   App.tsx        el POS (venta, teclado, offline)
   Admin.tsx      backoffice

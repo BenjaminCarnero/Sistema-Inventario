@@ -155,6 +155,28 @@ def get_password_hash(password: str) -> str:
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
 
+# --- Largo mínimo del PIN, por rol ----------------------------------------
+# El cajero teclea su PIN decenas de veces por turno y en un mostrador: cuatro
+# dígitos es un compromiso razonable. El administrador cambia precios, borra
+# usuarios y descarga la base entera, así que se le exige más.
+#
+# Vive acá y no en el router porque `seed_admin.py` también lo necesita: cuando
+# la política estaba sólo en el router, el script de instalación dejaba crear
+# el primer administrador —la cuenta más privilegiada de todas— con un PIN de
+# cuatro caracteres.
+PIN_MINIMO = 4
+
+
+def pin_minimo(rol_id: int) -> int:
+    from app.models import RolEnum
+
+    return {
+        RolEnum.ADMIN.value: 8,
+        RolEnum.ENCARGADO.value: 6,
+        RolEnum.CAJERO.value: 4,
+    }.get(rol_id, PIN_MINIMO)
+
+
 # Hash descartable, con el mismo costo que uno real. Se usa cuando el usuario
 # no existe para que la respuesta tarde lo mismo que cuando sí existe: sin
 # esto, el login contesta en 1 ms para un nombre inventado y en 200 ms para uno

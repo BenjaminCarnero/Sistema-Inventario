@@ -106,6 +106,27 @@ def create_venta(
                     detail=f"El monto recibido supera el tope configurado ({tope:,.0f})"
                 )
 
+        # El descuento se valida acá, antes de escribir nada. Estaba más abajo,
+        # después de haber insertado la venta y descontado el stock: con las
+        # claves foráneas activadas, un descuento inexistente ni siquiera
+        # llegaba a esa comprobación y moría con un error de integridad en vez
+        # del mensaje que corresponde.
+        descuento = None
+        if venta.descuento_id:
+            descuento = db.query(models.Descuento).filter(
+                models.Descuento.id == venta.descuento_id
+            ).first()
+            if not descuento:
+                raise HTTPException(status_code=404, detail="Descuento no encontrado")
+            if not descuento.activo:
+                raise HTTPException(status_code=400, detail="El descuento no está activo")
+
+            ahora = datetime.now()
+            if descuento.fecha_inicio and ahora < descuento.fecha_inicio:
+                raise HTTPException(status_code=400, detail="El descuento todavía no está vigente")
+            if descuento.fecha_fin and ahora > descuento.fecha_fin:
+                raise HTTPException(status_code=400, detail="El descuento está vencido")
+
         # --- Idempotencia ---------------------------------------------------
         # El POS manda un identificador propio por venta. Si la sincronización
         # se reintenta (red intermitente), se devuelve la venta ya registrada
@@ -194,21 +215,7 @@ def create_venta(
 
         # Aplicar descuento si la venta trae uno. El total se recalcula acá en el
         # servidor y no se confía en lo que mandó el cliente.
-        if venta.descuento_id:
-            descuento = db.query(models.Descuento).filter(
-                models.Descuento.id == venta.descuento_id
-            ).first()
-            if not descuento:
-                raise HTTPException(status_code=404, detail="Descuento no encontrado")
-            if not descuento.activo:
-                raise HTTPException(status_code=400, detail="El descuento no está activo")
-
-            ahora = datetime.now()
-            if descuento.fecha_inicio and ahora < descuento.fecha_inicio:
-                raise HTTPException(status_code=400, detail="El descuento todavía no está vigente")
-            if descuento.fecha_fin and ahora > descuento.fecha_fin:
-                raise HTTPException(status_code=400, detail="El descuento está vencido")
-
+        if descuento is not None:
             if descuento.producto_id:
                 # Descuento por producto: sólo sobre las líneas de ese producto
                 base = sum(
