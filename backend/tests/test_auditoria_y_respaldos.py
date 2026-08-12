@@ -1,9 +1,22 @@
 """Respaldos, auditoría, freno al login y tope de devoluciones."""
 from datetime import date, datetime, timedelta, timezone
 
-from app import models, respaldos
+from app import auth, models, respaldos
 from app.routers.reportes import rango_local_en_utc, fecha_local_de
 from tests.conftest import crear_usuario, token_de, cabecera
+
+
+def _fallos_de_la_cuenta(db) -> int:
+    """Intentos fallidos anotados contra la cuenta (no contra la IP)."""
+    return db.query(models.IntentoLogin).filter(
+        ~models.IntentoLogin.usuario.startswith(auth._MARCA_IP)
+    ).count()
+
+
+def _fallos_de_la_ip(db) -> int:
+    return db.query(models.IntentoLogin).filter(
+        models.IntentoLogin.usuario.startswith(auth._MARCA_IP)
+    ).count()
 
 
 class TestRespaldos:
@@ -98,14 +111,49 @@ class TestFrenoAlLogin:
         for _ in range(5):
             client.post("/auth/login", data={"username": "admin", "password": "mal"})
 
-        assert db.query(models.IntentoLogin).count() == 5
+        assert _fallos_de_la_cuenta(db) == 5
         assert client.post("/auth/login", data={"username": "admin", "password": "mal"}).status_code == 429
 
     def test_entrar_bien_borra_los_fallos(self, client, admin, db):
         for _ in range(3):
             client.post("/auth/login", data={"username": "admin", "password": "mal"})
         client.post("/auth/login", data={"username": "admin", "password": "admin123"})
-        assert db.query(models.IntentoLogin).count() == 0
+        assert _fallos_de_la_cuenta(db) == 0
+
+    def test_entrar_bien_no_borra_el_contador_de_la_ip(self, client, admin, db):
+        """Si lo borrara, a un atacante le alcanzaría con entrar a una cuenta
+        propia cada tantos intentos para poner el freno en cero."""
+        for _ in range(3):
+            client.post("/auth/login", data={"username": "admin", "password": "mal"})
+        client.post("/auth/login", data={"username": "admin", "password": "admin123"})
+        assert _fallos_de_la_ip(db) == 3
+
+    def test_una_ip_no_puede_repartir_intentos_entre_muchas_cuentas(self, client, admin, db):
+        """El freno por cuenta se esquivaba cambiando de nombre en cada intento:
+        cada cuenta estrenaba su propio contador y nada miraba el conjunto."""
+        for numero in range(auth.MAX_CUENTAS_POR_IP + 1):
+            client.post("/auth/login", data={"username": f"inventado{numero}", "password": "mal"})
+
+        # Ninguna cuenta llegó a su tope individual, pero el barrido sí al suyo
+        assert _fallos_de_la_cuenta(db) == auth.MAX_CUENTAS_POR_IP + 1
+        r = client.post("/auth/login", data={"username": "otro-mas", "password": "mal"})
+        assert r.status_code == 429
+
+    def test_equivocarse_con_el_propio_pin_no_frena_al_resto_del_local(self, client, admin, db):
+        """Contando intentos a secas, un cajero con mala mañana dejaba sin
+        entrar a todo el mostrador: detrás de un router comparten una sola IP."""
+        crear_usuario(db, "cajero_torpe", "1234", models.RolEnum.CAJERO.value)
+        for _ in range(auth.MAX_CUENTAS_POR_IP * 3):
+            client.post("/auth/login", data={"username": "cajero_torpe", "password": "mal"})
+
+        # Su propia cuenta sí quedó frenada, pero es una sola cuenta
+        assert client.post(
+            "/auth/login", data={"username": "cajero_torpe", "password": "1234"}
+        ).status_code == 429
+        # El admin, desde la misma IP, entra sin problema
+        assert client.post(
+            "/auth/login", data={"username": "admin", "password": "admin123"}
+        ).status_code == 200
 
 
 class TestPinPorRol:

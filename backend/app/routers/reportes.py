@@ -8,7 +8,7 @@ from app import models, schemas, database, dependencies
 router = APIRouter(prefix="/reportes", tags=["reportes"])
 
 # Los reportes son información de gestión: sólo admin y encargado.
-get_admin_user = dependencies.require_role(
+gestor_reportes = dependencies.require_role(
     [models.RolEnum.ADMIN.value, models.RolEnum.ENCARGADO.value]
 )
 
@@ -43,7 +43,7 @@ def fecha_local_de(momento_utc: datetime) -> date:
 
 
 @router.get("/kpi", response_model=schemas.KpiResponse)
-def get_kpi(db: Session = Depends(database.get_db), current_user: models.Usuario = Depends(get_admin_user)):
+def get_kpi(db: Session = Depends(database.get_db), current_user: models.Usuario = Depends(gestor_reportes)):
     inicio, fin = dia_local_en_utc()
 
     ventas_hoy = db.query(models.Venta).filter(
@@ -91,7 +91,7 @@ def _devoluciones_por_producto(db: Session) -> dict[int, dict]:
 
 
 @router.get("/top_productos", response_model=List[schemas.TopProducto])
-def get_top_productos(db: Session = Depends(database.get_db), current_user: models.Usuario = Depends(get_admin_user)):
+def get_top_productos(db: Session = Depends(database.get_db), current_user: models.Usuario = Depends(gestor_reportes)):
     resultados = db.query(
         models.Producto.id,
         models.Producto.nombre,
@@ -118,7 +118,7 @@ def get_top_productos(db: Session = Depends(database.get_db), current_user: mode
 
 
 @router.get("/cajas", response_model=List[schemas.CajaReporte])
-def get_historial_cajas(db: Session = Depends(database.get_db), current_user: models.Usuario = Depends(get_admin_user)):
+def get_historial_cajas(db: Session = Depends(database.get_db), current_user: models.Usuario = Depends(gestor_reportes)):
     cajas = db.query(models.CajaTurno).order_by(desc(models.CajaTurno.fecha_apertura)).limit(50).all()
 
     reporte_cajas = []
@@ -151,7 +151,7 @@ def get_historial_cajas(db: Session = Depends(database.get_db), current_user: mo
 def get_stock_bajo(
     umbral: int = Query(5, ge=0, description="Stock por debajo del cual se considera bajo"),
     db: Session = Depends(database.get_db),
-    current_user: models.Usuario = Depends(get_admin_user),
+    current_user: models.Usuario = Depends(gestor_reportes),
 ):
     """Productos cuyo stock está por debajo del umbral. Alimenta las alertas
     de disponibilidad del panel de admin/encargado."""
@@ -178,7 +178,7 @@ def get_ventas_periodo(
     hasta: date = Query(..., description="Fecha final inclusive (YYYY-MM-DD)"),
     cajero_id: Optional[int] = Query(None, description="Filtrar por cajero"),
     db: Session = Depends(database.get_db),
-    current_user: models.Usuario = Depends(get_admin_user),
+    current_user: models.Usuario = Depends(gestor_reportes),
 ):
     """Ventas de un período, con detalle de productos. Es la fuente del export a Excel."""
     if desde > hasta:
@@ -250,7 +250,7 @@ def get_ventas_periodo(
 def get_rentabilidad(
     limite: int = Query(20, ge=1, le=100),
     db: Session = Depends(database.get_db),
-    current_user: models.Usuario = Depends(get_admin_user),
+    current_user: models.Usuario = Depends(gestor_reportes),
 ):
     """Ganancia por producto: recaudado menos costo por unidad vendida."""
     resultados = db.query(
@@ -293,7 +293,7 @@ def get_rentabilidad(
 def get_ventas_por_dia(
     dias: int = Query(14, ge=1, le=90),
     db: Session = Depends(database.get_db),
-    current_user: models.Usuario = Depends(get_admin_user),
+    current_user: models.Usuario = Depends(gestor_reportes),
 ):
     """Serie temporal de recaudación diaria para el gráfico del dashboard.
     Devuelve todos los días del rango, incluidos los que no tuvieron ventas."""
@@ -335,7 +335,7 @@ def get_ventas_por_dia(
 def get_ventas_caja(
     caja_id: int,
     db: Session = Depends(database.get_db),
-    current_user: models.Usuario = Depends(get_admin_user),
+    current_user: models.Usuario = Depends(gestor_reportes),
 ):
     caja = db.query(models.CajaTurno).filter(models.CajaTurno.id == caja_id).first()
     if not caja:

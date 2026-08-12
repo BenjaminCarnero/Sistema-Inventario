@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     # El token de Mercado Pago es una credencial: va en el .env, nunca en el código.
     MERCADOPAGO_ACCESS_TOKEN: str = ""
 
+    # A dónde vuelve el comprador después de pagar con el QR. En producción
+    # tiene que ser la dirección pública del POS: apuntando a localhost, el
+    # cliente termina en una página que sólo existe en la máquina de la caja.
+    FRONTEND_URL: str = "http://localhost:5173"
+
     # Orígenes que pueden llamar a la API desde el navegador. El comodín "*"
     # junto con credenciales deja que cualquier web haga pedidos autenticados,
     # así que por defecto se listan sólo los de desarrollo.
@@ -107,3 +112,13 @@ if "*" in settings.CORS_ORIGINS:
 
 if not settings.MERCADOPAGO_ACCESS_TOKEN:
     _avisar("Sin MERCADOPAGO_ACCESS_TOKEN: los cobros por QR van a fallar.")
+
+# Chequeo aparte y no encadenado al anterior: si fuera un `elif`, una instalación
+# que todavía no configuró Mercado Pago nunca vería este aviso, y al agregar el
+# token después sólo aparecería en el siguiente reinicio.
+if es_produccion and "localhost" in settings.FRONTEND_URL:
+    _avisar(
+        "FRONTEND_URL apunta a localhost: después de pagar con QR, el cliente "
+        "va a caer en una página que no existe. Definila en backend/.env.",
+        critico=True,
+    )

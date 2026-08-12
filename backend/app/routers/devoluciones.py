@@ -1,9 +1,12 @@
+import logging
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app import models, schemas, database, dependencies, auditoria
 from app.routers.configuracion import obtener_config
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/devoluciones", tags=["devoluciones"])
 
@@ -268,6 +271,8 @@ def crear_devolucion(
     except HTTPException:
         db.rollback()
         raise
-    except Exception as e:
+    except Exception:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        # El mensaje interno queda en el log: al cliente le llega uno fijo.
+        logger.exception("Error inesperado al registrar una devolución")
+        raise HTTPException(status_code=500, detail="No se pudo registrar la devolución")

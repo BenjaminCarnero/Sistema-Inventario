@@ -19,6 +19,22 @@ export interface VentaOffline {
   /** Identificador propio de esta venta: evita duplicarla al reintentar la sincronización. */
   uuid_cliente?: string;
   metodo_pago: string;
+  /** Referencia del cobro por QR. El servidor la usa para confirmar el pago. */
+  pago_referencia?: string;
+  /**
+   * Motivo por el que el servidor rechazó esta venta de forma definitiva (por
+   * ejemplo, un cobro por QR que nunca se acreditó). Mientras esté cargado, la
+   * venta se saltea al sincronizar: si se reintentara, trabaría para siempre a
+   * las que vienen atrás en la cola.
+   */
+  rechazo?: string;
+  /**
+   * Envíos fallidos con motivo reintentable. La búsqueda de pagos de Mercado
+   * Pago es consistente en diferido: un cobro que existe puede tardar en
+   * aparecer, así que un "no está acreditado" no se toma como definitivo a la
+   * primera. Pasado el tope, la venta se marca con `rechazo`.
+   */
+  intentos?: number;
   monto_recibido?: number;
   vuelto?: number;
   descuento_id?: number | null;

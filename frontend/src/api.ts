@@ -1,5 +1,24 @@
 const API_URL = '';
 
+/**
+ * Texto legible a partir del `detail` de FastAPI.
+ *
+ * En los errores de validación `detail` no es un texto sino una lista de
+ * objetos, y concatenarla a secas deja un "[object Object]" — que es
+ * justamente lo que después se guarda como motivo del rechazo para que lo
+ * lea el encargado.
+ */
+function detalleLegible(detail: unknown): string {
+  if (typeof detail === 'string' && detail) return detail;
+  if (Array.isArray(detail)) {
+    const mensajes = detail
+      .map(d => (typeof d?.msg === 'string' ? d.msg : null))
+      .filter(Boolean);
+    if (mensajes.length) return mensajes.join('; ');
+  }
+  return 'Error sincronizando venta';
+}
+
 export const api = {
   async register(nombre: string, pin_acceso: string, rol_id: number = 1) {
     const res = await fetch(`${API_URL}/auth/register`, {
@@ -194,7 +213,16 @@ export const api = {
       body: JSON.stringify(venta)
     });
     if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
-    if (!res.ok) throw new Error('Error sincronizando venta');
+    if (!res.ok) {
+      // El código importa al sincronizar: un 4xx es definitivo (el servidor
+      // rechazó la venta y la va a rechazar siempre) y un 5xx o un corte de red
+      // es transitorio. Sin distinguirlos, una venta rechazada se reintenta
+      // eternamente y traba la cola.
+      const cuerpo = await res.json().catch(() => null);
+      const error = new Error(detalleLegible(cuerpo?.detail)) as Error & { status?: number };
+      error.status = res.status;
+      throw error;
+    }
     return res.json();
   },
 

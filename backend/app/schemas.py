@@ -156,6 +156,9 @@ class VentaBase(BaseModel):
     iva_porcentaje: Optional[float] = None
     iva_monto: Optional[float] = None
     uuid_cliente: Optional[str] = Field(default=None, max_length=64)
+    # Referencia del cobro por QR. Obligatoria cuando el método es MERCADOPAGO:
+    # el servidor la usa para confirmar el pago contra la pasarela.
+    pago_referencia: Optional[str] = Field(default=None, max_length=64)
     estado: str = "COMPLETADA"
     estado_sincronizacion: bool = True
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
-import { ShoppingCart, ScanLine, WifiOff, Wifi, Printer, Banknote, CreditCard, Smartphone, Landmark, X, Camera, CameraOff, Package, Tag, Search, Plus, Minus, Trash2, Keyboard, CloudOff } from 'lucide-react';
+import { ShoppingCart, ScanLine, WifiOff, Wifi, Printer, Banknote, CreditCard, Smartphone, Landmark, X, Camera, CameraOff, Package, Tag, Search, Plus, Minus, Trash2, Keyboard, CloudOff, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { QRCodeCanvas } from 'qrcode.react';
 import { api } from './api';
@@ -25,12 +25,48 @@ const METODOS_PAGO: Record<string, { etiqueta: string; icono: typeof Banknote; c
   TRANSFERENCIA: { etiqueta: 'Transferencia', icono: Landmark, color: 'text-brand-light' },
 };
 
+/** Envíos fallidos que se toleran antes de dar una venta por perdida. */
+const MAX_REINTENTOS_COBRO = 5;
+
+/**
+ * Qué hacer con una venta que el servidor no aceptó.
+ *
+ * Tratar todo 4xx como definitivo pierde ventas reales: una sesión vencida
+ * (401) o el freno al login (429) no dicen nada sobre la venta en sí, y un 409
+ * significa lo contrario de un rechazo —el servidor ya la tiene—.
+ */
+function clasificarFalloDeEnvio(
+  status: number | undefined,
+  intentos: number,
+): 'registrada' | 'rechazada' | 'reintentar' | 'cortar' {
+  // El servidor ya la registró (choque de uuid o de referencia de cobro)
+  if (status === 409) return 'registrada';
+
+  // Sin código es un corte de red. 5xx es el servidor. 401/403 son de sesión y
+  // 429 es del freno: ninguno tiene que ver con esta venta, y si pasan van a
+  // pasarle también a las que siguen, así que no vale la pena seguir el bucle.
+  if (!status || status >= 500 || status === 401 || status === 403 || status === 429) {
+    return 'cortar';
+  }
+
+  // La búsqueda de pagos de Mercado Pago es consistente en diferido: un cobro
+  // que existe puede tardar en aparecer, y el POS manda la venta apenas lo ve
+  // acreditado. Darlo por perdido en el primer intento tira plata cobrada.
+  if (status === 402) return intentos < MAX_REINTENTOS_COBRO ? 'reintentar' : 'rechazada';
+
+  // 400, 404, 422: la venta está mal armada y va a estarlo siempre.
+  return 'rechazada';
+}
+
 function POS() {
   const { showToast } = useUI();
   const { config, money, desglosarIva, recargar: recargarConfig } = useConfig();
   const localProductos = useLiveQuery(() => db.productos.toArray()) || [];
-  // Ventas cobradas que todavía no llegaron al servidor
-  const ventasPendientes = useLiveQuery(() => db.ventasOffline.count()) ?? 0;
+  // Ventas cobradas que todavía no llegaron al servidor. Las rechazadas se
+  // cuentan aparte: nunca se reintentan solas, así que sumarlas acá dejaba el
+  // cierre de caja bloqueado para siempre esperando algo que no iba a pasar.
+  const ventasPendientes = useLiveQuery(() => db.ventasOffline.filter(v => !v.rechazo).count()) ?? 0;
+  const ventasRechazadas = useLiveQuery(() => db.ventasOffline.filter(v => !!v.rechazo).count()) ?? 0;
   const [cart, setCart] = useState<{producto: ProductoLocal, cantidad: number}[]>([]);
   // Contempla tanto la falta de red como el servidor caído
   const { offline: isOffline, servidorCaido } = useConexion();
@@ -343,7 +379,12 @@ function POS() {
       .slice(0, 5);
   })();
 
-  const processCheckout = async (metodo: string, recibido?: number, vuelto?: number) => {
+  const processCheckout = async (
+    metodo: string,
+    recibido?: number,
+    vuelto?: number,
+    pagoReferencia?: string,
+  ) => {
     if (cart.length === 0) return;
 
     const venta: VentaOffline = {
@@ -352,6 +393,9 @@ function POS() {
       // el backend reconoce la venta y no la cobra dos veces.
       uuid_cliente: crypto.randomUUID(),
       metodo_pago: metodo,
+      // Con QR viaja la referencia del cobro: el servidor la comprueba contra
+      // Mercado Pago antes de dar la venta por registrada.
+      pago_referencia: pagoReferencia,
       monto_recibido: recibido,
       vuelto: vuelto,
       descuento_id: descuentoAplicado?.id ?? null,
@@ -573,7 +617,9 @@ function POS() {
           if (status.approved) {
             clearInterval(interval);
             setShowMpQR(false);
-            processCheckout('MERCADOPAGO');
+            // La referencia viaja con la venta: el servidor vuelve a confirmar
+            // el cobro con ella antes de registrarla.
+            processCheckout('MERCADOPAGO', undefined, undefined, result.external_reference);
             showToast('Pago acreditado por Mercado Pago', 'success');
           } else if (status.monto_insuficiente) {
             // Se pagó, pero por menos de lo que vale la compra: no se cierra
@@ -662,32 +708,68 @@ function POS() {
         }
       }
 
-      const offlineVentas = await db.ventasOffline.toArray();
+      // Las ya rechazadas se saltean: reintentarlas trabaría a las de atrás.
+      const offlineVentas = (await db.ventasOffline.toArray()).filter(v => !v.rechazo);
       if (offlineVentas.length === 0) return;
 
+      let sincronizadas = 0;
+      let rechazadas = 0;
+
       for (const venta of offlineVentas) {
-        // Enviar a la API
-        await api.createVenta({
-          uuid_cliente: venta.uuid_cliente,
-          metodo_pago: venta.metodo_pago,
-          monto_recibido: venta.monto_recibido,
-          vuelto: venta.vuelto,
-          descuento_id: venta.descuento_id ?? null,
-          estado_sincronizacion: true,
-          detalles: venta.detalles.map(d => ({
-            producto_id: d.producto_id,
-            cantidad: d.cantidad,
-            precio_unitario: d.precio_unitario
-          }))
-        });
-        
-        // Si tiene éxito, la borramos de la DB local para que no se duplique
+        try {
+          await api.createVenta({
+            uuid_cliente: venta.uuid_cliente,
+            metodo_pago: venta.metodo_pago,
+            pago_referencia: venta.pago_referencia,
+            monto_recibido: venta.monto_recibido,
+            vuelto: venta.vuelto,
+            descuento_id: venta.descuento_id ?? null,
+            estado_sincronizacion: true,
+            detalles: venta.detalles.map(d => ({
+              producto_id: d.producto_id,
+              cantidad: d.cantidad,
+              precio_unitario: d.precio_unitario
+            }))
+          });
+        } catch (err: any) {
+          const destino = clasificarFalloDeEnvio(err?.status, venta.intentos ?? 0);
+
+          if (destino === 'cortar') return;  // se reintenta todo más adelante
+
+          if (destino === 'reintentar') {
+            if (venta.id) {
+              await db.ventasOffline.update(venta.id, { intentos: (venta.intentos ?? 0) + 1 });
+            }
+            continue;
+          }
+
+          if (destino === 'rechazada') {
+            // La venta NO se borra: si hubo plata de por medio, el registro
+            // tiene que quedar. Se marca para que no se reintente sola y para
+            // que alguien la mire.
+            if (venta.id) await db.ventasOffline.update(venta.id, { rechazo: err.message });
+            rechazadas++;
+            continue;
+          }
+          // 'registrada': el servidor ya la tiene, sigue al borrado de abajo
+        }
+
+        // Registrada en el servidor: se borra de la cola local
         if (venta.id) {
           await db.ventasOffline.delete(venta.id);
         }
+        sincronizadas++;
       }
-      console.log("Ventas sincronizadas exitosamente");
-      showToast("Ventas locales sincronizadas con el servidor", 'success');
+
+      if (sincronizadas > 0) {
+        showToast("Ventas locales sincronizadas con el servidor", 'success');
+      }
+      if (rechazadas > 0) {
+        showToast(
+          `${rechazadas} venta(s) quedaron sin registrar: el servidor las rechazó. Revisalas con el encargado.`,
+          'error'
+        );
+      }
 
     } catch (err) {
       console.error("Error sincronizando ventas:", err);
@@ -750,6 +832,16 @@ function POS() {
             >
               <CloudOff size={14} />
               {ventasPendientes} sin enviar
+            </span>
+          )}
+          {/* Rechazadas por el servidor: no se reintentan solas y hay que mirarlas */}
+          {ventasRechazadas > 0 && (
+            <span
+              className="flex items-center gap-1.5 text-xs font-semibold bg-status-error/20 text-status-error px-2.5 py-1.5 rounded-lg border border-status-error/30"
+              title="El servidor las rechazó. No se van a enviar solas: mostráselas al encargado."
+            >
+              <AlertTriangle size={14} />
+              {ventasRechazadas} rechazada{ventasRechazadas > 1 ? 's' : ''}
             </span>
           )}
           <div className="flex items-center gap-2">

@@ -2,10 +2,20 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from app import models, dependencies
 from app.config import settings
 import mercadopago
-from pydantic import BaseModel
+from mercadopago.config import RequestOptions
+from pydantic import BaseModel, Field
 import uuid
 
 router = APIRouter(prefix="/pagos", tags=["pagos"])
+
+# Tolerancia al comparar importes: Mercado Pago redondea a dos decimales.
+TOLERANCIA_CENTAVOS = 0.01
+
+# El SDK viene con 60 segundos de espera y 3 reintentos: hasta tres minutos
+# colgado. `POST /ventas` consulta el cobro con la transacción de escritura
+# abierta, así que ese tiempo es tiempo de base bloqueada para las demás cajas.
+# Ocho segundos sin reintentos es de sobra para una consulta de estado.
+ESPERA_CONSULTA = RequestOptions(connection_timeout=8.0, max_retries=0)
 
 
 def get_sdk():
@@ -22,10 +32,34 @@ def get_sdk():
     return mercadopago.SDK(settings.MERCADOPAGO_ACCESS_TOKEN)
 
 
+def total_aprobado(external_reference: str) -> float:
+    """Suma de los pagos aprobados contra una referencia.
+
+    Puede haber más de uno: el cliente que paga en dos partes, o el que
+    reintenta después de un rechazo.
+    """
+    respuesta = get_sdk().payment().search(
+        {"external_reference": external_reference},
+        request_options=ESPERA_CONSULTA,
+    )
+    pagos = respuesta.get("response", {}).get("results", [])
+    return sum(
+        float(p.get("transaction_amount") or 0)
+        for p in pagos
+        if p.get("status") == "approved"
+    )
+
+
+def alcanza(pagado: float, esperado: float) -> bool:
+    """¿Lo cobrado cubre lo que había que cobrar?"""
+    return pagado + TOLERANCIA_CENTAVOS >= esperado
+
+
 class PreferenceCreate(BaseModel):
-    title: str
-    quantity: int
-    unit_price: float
+    # Sin techos, un importe negativo o absurdo viaja tal cual a Mercado Pago
+    title: str = Field(min_length=1, max_length=200)
+    quantity: int = Field(gt=0, le=10_000)
+    unit_price: float = Field(gt=0)
 
 
 @router.post("/mercadopago/preference")
@@ -44,10 +78,12 @@ def create_preference(
             }
         ],
         "external_reference": external_reference,
+        # A dónde vuelve el comprador después de pagar. Clavado a localhost
+        # dejaba al cliente en una página inexistente apenas se publicaba el POS.
         "back_urls": {
-            "success": "http://localhost:5173",
-            "failure": "http://localhost:5173",
-            "pending": "http://localhost:5173",
+            "success": settings.FRONTEND_URL,
+            "failure": settings.FRONTEND_URL,
+            "pending": settings.FRONTEND_URL,
         },
         "auto_return": "approved",
     }
@@ -67,29 +103,24 @@ def check_payment_status(
     total_esperado: float = Query(..., gt=0, description="Total que debería haberse cobrado"),
     current_user: models.Usuario = Depends(dependencies.get_current_active_user),
 ):
-    """Confirma un pago sólo si además coincide el importe.
+    """Estado del cobro, para que el POS sepa cuándo mostrar el ticket.
 
-    Con mirar únicamente `status == approved` alcanzaba con generar una
-    preferencia de $1 para dar por pagado un carrito de $50.000: hay que
-    comparar contra lo que realmente se cobró.
+    Ojo: esto es sólo un aviso para la pantalla del cajero. La venta no se da
+    por cobrada con lo que devuelva acá, porque tanto la referencia como el
+    total los elige quien llama. La confirmación que vale es la que hace
+    `POST /ventas` contra el total que calcula el propio servidor.
     """
-    payment_response = get_sdk().payment().search({"external_reference": external_reference})
-    payments = payment_response.get("response", {}).get("results", [])
-
-    aprobados = [p for p in payments if p.get("status") == "approved"]
-    if not aprobados:
+    pagado = total_aprobado(external_reference)
+    if pagado <= 0:
         return {"approved": False, "pagado": 0.0}
 
-    # Puede haber más de un pago aprobado contra la misma referencia
-    pagado = sum(float(p.get("transaction_amount") or 0) for p in aprobados)
-
-    # Tolerancia de un centavo por el redondeo de Mercado Pago
-    suficiente = pagado + 0.01 >= total_esperado
+    suficiente = alcanza(pagado, total_esperado)
 
     return {
         "approved": suficiente,
         "pagado": round(pagado, 2),
         "esperado": round(total_esperado, 2),
-        # Permite avisar al cajero en lugar de dar la venta por cerrada
-        "monto_insuficiente": bool(aprobados) and not suficiente,
+        # Acá ya se sabe que algo se pagó: si no alcanza, conviene avisarle al
+        # cajero en lugar de dejar la pantalla girando
+        "monto_insuficiente": not suficiente,
     }

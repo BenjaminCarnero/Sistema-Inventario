@@ -12,6 +12,7 @@ import pytest
 
 from app import models
 from app.config import settings
+from app.routers import pagos
 from tests.conftest import cabecera, crear_usuario, token_de
 
 
@@ -466,6 +467,77 @@ class TestIdempotencia:
         })
         db.refresh(producto)
         assert producto.stock_actual == stock
+
+
+class TestCobroPorQR:
+    """El cajero declara el pago; el servidor lo comprueba.
+
+    Antes alcanzaba con mandar `metodo_pago=MERCADOPAGO` para que la venta
+    quedara registrada como cobrada, el stock bajara y el arqueo la contara,
+    sin que hubiera entrado un peso ni quedara nada que conciliar.
+    """
+
+    def _vender_qr(self, client, auth, producto, **extra):
+        cuerpo = {
+            "metodo_pago": "MERCADOPAGO",
+            "detalles": [{"producto_id": producto.id, "cantidad": 1, "precio_unitario": 1000}],
+        }
+        cuerpo.update(extra)
+        return client.post("/ventas/", headers=auth, json=cuerpo)
+
+    def _acreditar(self, monkeypatch, monto: float):
+        monkeypatch.setattr(pagos, "total_aprobado", lambda referencia: monto)
+
+    def test_sin_referencia_del_cobro_no_hay_venta(self, client, auth_cajero, producto, sin_iva, db):
+        r = self._vender_qr(client, auth_cajero, producto)
+        assert r.status_code == 400
+        db.refresh(producto)
+        assert producto.stock_actual == 100
+
+    def test_declarar_el_pago_sin_que_exista_no_alcanza(self, client, auth_cajero, producto, sin_iva, db, monkeypatch):
+        self._acreditar(monkeypatch, 0.0)
+        r = self._vender_qr(client, auth_cajero, producto, pago_referencia="ref-sin-pago")
+        assert r.status_code == 402
+        # El rollback tiene que devolver el stock que se descontó antes de comprobar
+        db.refresh(producto)
+        assert producto.stock_actual == 100
+        assert db.query(models.Venta).count() == 0
+
+    def test_pagar_de_menos_no_cierra_la_venta(self, client, auth_cajero, producto, sin_iva, db, monkeypatch):
+        """Una preferencia de $1 no puede dar por cobrado un carrito de $1000."""
+        self._acreditar(monkeypatch, 1.0)
+        r = self._vender_qr(client, auth_cajero, producto, pago_referencia="ref-de-un-peso")
+        assert r.status_code == 402
+        db.refresh(producto)
+        assert producto.stock_actual == 100
+
+    def test_con_el_cobro_acreditado_la_venta_entra(self, client, auth_cajero, producto, sin_iva, db, monkeypatch):
+        self._acreditar(monkeypatch, 1000.0)
+        r = self._vender_qr(client, auth_cajero, producto, pago_referencia="ref-buena")
+        assert r.status_code == 201, r.text
+        # La referencia queda guardada: es lo que después permite conciliar
+        assert r.json()["pago_referencia"] == "ref-buena"
+        db.refresh(producto)
+        assert producto.stock_actual == 99
+
+    def test_un_mismo_cobro_no_paga_dos_ventas(self, client, auth_cajero, producto, sin_iva, monkeypatch):
+        self._acreditar(monkeypatch, 1000.0)
+        primera = self._vender_qr(client, auth_cajero, producto, pago_referencia="ref-unica")
+        assert primera.status_code == 201
+
+        segunda = self._vender_qr(client, auth_cajero, producto, pago_referencia="ref-unica")
+        assert segunda.status_code == 409
+
+    def test_el_total_lo_pone_el_servidor_no_el_cliente(self, client, auth_cajero, producto, sin_iva, monkeypatch):
+        """El cliente pide 3 unidades ($3000) declarando un precio de $1: lo que
+        se compara contra Mercado Pago es el total del catálogo, no el suyo."""
+        self._acreditar(monkeypatch, 3.0)
+        r = client.post("/ventas/", headers=auth_cajero, json={
+            "metodo_pago": "MERCADOPAGO",
+            "pago_referencia": "ref-barata",
+            "detalles": [{"producto_id": producto.id, "cantidad": 3, "precio_unitario": 1}],
+        })
+        assert r.status_code == 402
 
 
 class TestCaja:

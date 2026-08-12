@@ -41,7 +41,9 @@ def login_for_access_token(
 
     user = db.query(models.Usuario).filter(models.Usuario.nombre == form_data.username).first()
 
-    if not user or not auth.verify_password(form_data.password, user.pin_acceso):
+    # Se verifica siempre, exista la cuenta o no, para que el tiempo de
+    # respuesta no delate qué nombres de usuario son válidos.
+    if not auth.verificar_credencial(form_data.password, user.pin_acceso if user else None):
         auth.registrar_intento_fallido(db, form_data.username, ip)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

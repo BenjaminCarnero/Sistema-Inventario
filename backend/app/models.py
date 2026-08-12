@@ -122,6 +122,10 @@ class Venta(Base):
     # Identificador que genera el POS al cobrar. Permite reintentar la
     # sincronización sin registrar la venta dos veces.
     uuid_cliente = Column(String(64), unique=True, index=True, nullable=True)
+    # Referencia del cobro por QR (el external_reference de Mercado Pago).
+    # Es lo que permite conciliar después contra el resumen de la pasarela, y
+    # es única: un mismo pago no puede respaldar dos ventas.
+    pago_referencia = Column(String(64), unique=True, index=True, nullable=True)
     # COMPLETADA, ANULADA o CON_DEVOLUCION. La venta nunca se borra: anularla
     # deja el registro y suma una devolución que la referencia.
     estado = Column(String(20), default="COMPLETADA", nullable=False)

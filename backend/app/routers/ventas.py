@@ -1,9 +1,14 @@
+import logging
 from typing import List
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app import models, schemas, database, dependencies
 from app.routers.configuracion import obtener_config
+from app.routers import pagos
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ventas", tags=["ventas"])
 
@@ -13,6 +18,45 @@ MAX_LINEAS = 200
 MAX_CANTIDAD_POR_LINEA = 10_000
 
 METODOS_VALIDOS = {m.value for m in models.MetodoPagoEnum} | {"MERCADOPAGO"}
+
+
+def _confirmar_cobro_por_qr(db: Session, referencia: str, total: float, venta_id: int) -> str:
+    """Comprueba contra Mercado Pago que el cobro por QR realmente entró.
+
+    El chequeo va acá y no en el cliente porque acá el total no es negociable:
+    es el que acaba de calcular el servidor con los precios del catálogo. Antes
+    alcanzaba con mandar `metodo_pago=MERCADOPAGO` para dar por cobrada una
+    venta sin que hubiera entrado un peso, y sin dejar rastro para conciliar.
+    """
+    referencia = (referencia or "").strip()
+    if not referencia:
+        raise HTTPException(
+            status_code=400,
+            detail="Una venta por Mercado Pago tiene que traer la referencia del cobro",
+        )
+
+    # Una referencia respalda una sola venta: si no, un único pago de $50.000
+    # podría cerrar todas las ventas que se quisieran.
+    repetida = db.query(models.Venta).filter(
+        models.Venta.pago_referencia == referencia,
+        models.Venta.id != venta_id,
+    ).first()
+    if repetida:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Ese cobro de Mercado Pago ya respalda la venta #{repetida.id}",
+        )
+
+    pagado = pagos.total_aprobado(referencia)
+    if not pagos.alcanza(pagado, total):
+        raise HTTPException(
+            status_code=402,
+            detail=(
+                f"Mercado Pago no registra el cobro completo: "
+                f"acreditado {pagado:.2f} de {total:.2f}"
+            ),
+        )
+    return referencia
 
 
 @router.post("/", response_model=schemas.Venta, status_code=status.HTTP_201_CREATED)
@@ -84,6 +128,8 @@ def create_venta(
             estado_sincronizacion=venta.estado_sincronizacion,
             total=0,  # Se calculará ahora
         )
+        # La referencia del QR se asigna recién después de confirmar el cobro,
+        # más abajo: hasta entonces la venta no está pagada.
         db.add(db_venta)
         db.flush()  # Para obtener db_venta.id
 
@@ -180,6 +226,15 @@ def create_venta(
             db_venta.iva_monto = round(iva_monto, 2)
 
         db_venta.total = round(total_venta, 2)
+
+        # El cobro por QR se confirma contra Mercado Pago con el total recién
+        # calculado. Si no está acreditado, la excepción hace rollback y el
+        # stock descontado más arriba vuelve a su lugar.
+        if venta.metodo_pago == "MERCADOPAGO":
+            db_venta.pago_referencia = _confirmar_cobro_por_qr(
+                db, venta.pago_referencia, db_venta.total, db_venta.id
+            )
+
         db.commit()
         db.refresh(db_venta)
         return db_venta
@@ -187,9 +242,23 @@ def create_venta(
     except HTTPException:
         db.rollback()
         raise
-    except Exception as e:
+    except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        # Los índices únicos de `pago_referencia` y `uuid_cliente` frenaron una
+        # carrera: dos pedidos simultáneos con el mismo cobro o la misma venta.
+        # Uno de los dos entró, y este es el que perdió.
+        logger.warning("Choque de unicidad al registrar una venta", exc_info=True)
+        raise HTTPException(
+            status_code=409,
+            detail="Esa venta o ese cobro ya quedaron registrados",
+        )
+    except Exception:
+        db.rollback()
+        # El detalle va al log del servidor y no a la respuesta: el mensaje de
+        # SQLAlchemy trae el SQL, los nombres de las tablas y a veces rutas del
+        # disco. En producción se cierra /docs justamente para no regalar eso.
+        logger.exception("Error inesperado al registrar una venta")
+        raise HTTPException(status_code=500, detail="No se pudo registrar la venta")
 
 
 @router.get("/", response_model=List[schemas.Venta])

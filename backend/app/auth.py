@@ -17,9 +17,38 @@ MAX_INTENTOS = 5
 VENTANA_SEGUNDOS = 300      # los fallos se olvidan pasados 5 minutos
 BLOQUEO_SEGUNDOS = 60       # cuánto dura el bloqueo al superar el máximo
 
+# Contar sólo por (usuario, IP) dejaba pasar el barrido: probar cuatro o cinco
+# PIN contra cada cuenta del local, sin despertar nunca el contador de ninguna.
+#
+# El segundo freno cuenta **cuántas cuentas distintas** se intentaron desde esa
+# IP, y no cuántos intentos hubo. La diferencia importa: contando intentos, un
+# cajero que se equivoca quince veces con su propio PIN dejaría sin entrar a
+# todo el local, y detrás de un router —donde todas las cajas comparten una
+# sola salida a internet— alcanzaría con un mostrador con mala mañana para
+# cerrar el sistema entero. Probar ocho cuentas distintas en cinco minutos, en
+# cambio, no le pasa a nadie que esté trabajando.
+MAX_CUENTAS_POR_IP = 8
+
+# Prefijo de las filas que cuentan por IP. En `_limpiar` se quitan las barras
+# del nombre de usuario, así ninguna cuenta puede fabricar una clave que se
+# confunda con estas.
+_MARCA_IP = "|ip|"
+
+
+def _limpiar(usuario: str) -> str:
+    return (usuario or "").replace("|", "").lower()
+
 
 def _clave(usuario: str, ip: str) -> str:
-    return f"{(usuario or '').lower()}|{ip}"
+    return f"{_limpiar(usuario)}|{ip}"
+
+
+def _clave_ip(ip: str, usuario: str) -> str:
+    return f"{_MARCA_IP}{ip}|{_limpiar(usuario)}"
+
+
+def _prefijo_ip(ip: str) -> str:
+    return f"{_MARCA_IP}{ip}|"
 
 
 def _fallos_recientes(db, clave: str):
@@ -33,10 +62,9 @@ def _fallos_recientes(db, clave: str):
     ).order_by(models.IntentoLogin.fecha_hora).all()
 
 
-def segundos_de_bloqueo(db, usuario: str, ip: str) -> int:
-    """Devuelve cuántos segundos falta esperar, o 0 si puede intentar."""
-    fallos = _fallos_recientes(db, _clave(usuario, ip))
-    if len(fallos) < MAX_INTENTOS:
+def _bloqueo_de(db, clave: str, maximo: int) -> int:
+    fallos = _fallos_recientes(db, clave)
+    if len(fallos) < maximo:
         return 0
 
     ahora = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -44,10 +72,41 @@ def segundos_de_bloqueo(db, usuario: str, ip: str) -> int:
     return max(0, int(restante) + 1)
 
 
+def _bloqueo_por_barrido(db, ip: str) -> int:
+    """Bloqueo por probar demasiadas cuentas distintas desde la misma IP."""
+    from app import models
+
+    limite = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(seconds=VENTANA_SEGUNDOS)
+    filas = db.query(models.IntentoLogin).filter(
+        models.IntentoLogin.usuario.startswith(_prefijo_ip(ip)),
+        models.IntentoLogin.fecha_hora >= limite,
+    ).order_by(models.IntentoLogin.fecha_hora).all()
+
+    if len({fila.usuario for fila in filas}) <= MAX_CUENTAS_POR_IP:
+        return 0
+
+    ahora = datetime.now(timezone.utc).replace(tzinfo=None)
+    restante = BLOQUEO_SEGUNDOS - (ahora - filas[-1].fecha_hora).total_seconds()
+    return max(0, int(restante) + 1)
+
+
+def segundos_de_bloqueo(db, usuario: str, ip: str) -> int:
+    """Devuelve cuántos segundos falta esperar, o 0 si puede intentar.
+
+    Manda el más restrictivo de los dos frenos: el de la cuenta y el del
+    barrido de cuentas desde una misma IP.
+    """
+    return max(
+        _bloqueo_de(db, _clave(usuario, ip), MAX_INTENTOS),
+        _bloqueo_por_barrido(db, ip),
+    )
+
+
 def registrar_intento_fallido(db, usuario: str, ip: str) -> None:
     from app import models
 
     db.add(models.IntentoLogin(usuario=_clave(usuario, ip)))
+    db.add(models.IntentoLogin(usuario=_clave_ip(ip, usuario)))
 
     # Se aprovecha el paso para tirar lo viejo, así la tabla no crece sin fin
     viejo = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=7)
@@ -56,7 +115,12 @@ def registrar_intento_fallido(db, usuario: str, ip: str) -> None:
 
 
 def limpiar_intentos(db, usuario: str, ip: str) -> None:
-    """Un acceso correcto borra el historial de fallos de ese usuario."""
+    """Un acceso correcto borra el historial de fallos de ese usuario.
+
+    El contador de la IP no se toca a propósito: si se limpiara, a un atacante
+    le bastaría entrar a una cuenta propia cada tantos intentos para poner el
+    freno en cero y seguir probando contra las demás.
+    """
     from app import models
 
     db.query(models.IntentoLogin).filter(
@@ -75,6 +139,22 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def get_password_hash(password: str) -> str:
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+
+# Hash descartable, con el mismo costo que uno real. Se usa cuando el usuario
+# no existe para que la respuesta tarde lo mismo que cuando sí existe: sin
+# esto, el login contesta en 1 ms para un nombre inventado y en 200 ms para uno
+# válido, y el mensaje genérico de "usuario o PIN incorrectos" no sirve de nada
+# frente a un cronómetro.
+_HASH_SENUELO = bcrypt.hashpw(b"no-existe", bcrypt.gensalt()).decode('utf-8')
+
+
+def verificar_credencial(plain_password: str, hashed_password: Optional[str]) -> bool:
+    """Verifica el PIN tardando lo mismo exista o no la cuenta."""
+    if not hashed_password:
+        verify_password(plain_password, _HASH_SENUELO)
+        return False
+    return verify_password(plain_password, hashed_password)
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
