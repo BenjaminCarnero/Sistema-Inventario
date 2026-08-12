@@ -1,0 +1,6 @@
+# esbuild baja su binario nativo en el postinstall. Sin aprobarlo acá, pnpm
+# corta cualquier script del proyecto (dev, lint, test) con
+# ERR_PNPM_IGNORED_BUILDS. Ya venía como dependencia de vite; lo que cambió es
+# que vitest trajo una versión nueva y pnpm vuelve a pedir la aprobación.
+allowBuilds:
+  esbuild: true

@@ -133,22 +133,40 @@ def create_venta(
         db.add(db_venta)
         db.flush()  # Para obtener db_venta.id
 
+        # Lo que ya comprometió esta misma venta, por producto. Hace falta
+        # llevarlo aparte porque la resta la hace la base: el objeto que tenemos
+        # en memoria se queda con el valor viejo, y un producto repetido en dos
+        # líneas se validaría dos veces contra el mismo stock inicial.
+        comprometido: dict[int, int] = {}
+
         for detalle in venta.detalles:
-            # Bloquear la fila del producto (SELECT FOR UPDATE) para evitar race conditions
             producto = db.query(models.Producto).filter(
                 models.Producto.id == detalle.producto_id
-            ).with_for_update().first()
+            ).first()
             if not producto:
                 raise HTTPException(status_code=404, detail=f"Producto {detalle.producto_id} no encontrado")
 
             # Por defecto se permite stock negativo (el cajero ya entregó el
             # producto físico), pero se puede exigir stock desde configuración.
-            if not config.get("permitir_stock_negativo", True) and producto.stock_actual < detalle.cantidad:
+            disponible = producto.stock_actual - comprometido.get(detalle.producto_id, 0)
+            if not config.get("permitir_stock_negativo", True) and disponible < detalle.cantidad:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Stock insuficiente para {producto.nombre}. Disponible: {producto.stock_actual}"
+                    detail=f"Stock insuficiente para {producto.nombre}. Disponible: {disponible}"
                 )
-            producto.stock_actual -= detalle.cantidad
+            comprometido[detalle.producto_id] = comprometido.get(detalle.producto_id, 0) + detalle.cantidad
+
+            # La resta la hace la base y no Python. Acá antes había un
+            # `with_for_update()`, pero SQLite lo descarta en silencio —compila
+            # a un SELECT pelado— así que dos cajas vendiendo el mismo producto
+            # a la vez leían el mismo stock y las dos escribían el mismo valor:
+            # se perdía una unidad sin que nadie se enterara.
+            db.query(models.Producto).filter(
+                models.Producto.id == detalle.producto_id
+            ).update(
+                {models.Producto.stock_actual: models.Producto.stock_actual - detalle.cantidad},
+                synchronize_session=False,
+            )
 
             # El precio SIEMPRE sale del catálogo del servidor. Lo que manda el
             # cliente es sólo informativo: si se confiara en él, cualquiera con

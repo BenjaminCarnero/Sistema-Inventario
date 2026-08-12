@@ -8,6 +8,8 @@ el sistema operativo. Copiar el archivo mientras alguien está vendiendo puede
 dejar una base a medio escribir, que es peor que no tener copia: parece que
 está y no sirve.
 """
+import logging
+import shutil
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -15,7 +17,13 @@ from typing import List, Optional
 
 from app.config import BASE_DIR, settings
 
+logger = logging.getLogger(__name__)
+
 CARPETA = BASE_DIR / "respaldos"
+
+# Cuántas copias externas se conservan. Menos que las locales: la carpeta
+# externa suele ser un espacio sincronizado o un pendrive, con menos lugar.
+MAXIMO_EXTERNO = 10
 
 # Cuántas copias se conservan. Con una por cierre de caja, veinte cubren
 # aproximadamente un mes de trabajo sin llenar el disco.
@@ -75,17 +83,48 @@ def crear(motivo: str = "manual") -> Optional[Path]:
         conexion_origen.close()
 
     _podar()
+    _copiar_afuera(destino)
     return destino
 
 
-def _podar() -> None:
-    """Deja sólo las copias más recientes."""
-    copias = sorted(CARPETA.glob(f"{PREFIJO}*{SUFIJO}"))
-    for vieja in copias[:-MAXIMO_A_CONSERVAR]:
+def _copiar_afuera(copia: Path) -> Optional[Path]:
+    """Deja una segunda copia fuera de este disco, si hay carpeta configurada.
+
+    Va después de que la copia local quedó cerrada y nunca al revés: si la
+    carpeta externa está caída —el pendrive no está puesto, la red se cortó—,
+    el respaldo local igual quedó hecho. Por eso los errores se registran pero
+    no se propagan: quedarse sin copia externa es malo, pero perder el cierre
+    de caja por eso sería peor.
+    """
+    destino_externo = (settings.RESPALDO_EXTERNO or "").strip()
+    if not destino_externo:
+        return None
+
+    try:
+        carpeta = Path(destino_externo)
+        carpeta.mkdir(parents=True, exist_ok=True)
+        afuera = carpeta / copia.name
+        shutil.copy2(copia, afuera)
+        _podar_carpeta(carpeta, MAXIMO_EXTERNO)
+        return afuera
+    except OSError as error:
+        logger.warning("No se pudo copiar el respaldo a %s: %s", destino_externo, error)
+        return None
+
+
+def _podar_carpeta(carpeta: Path, maximo: int) -> None:
+    """Deja sólo las `maximo` copias más recientes de una carpeta."""
+    copias = sorted(carpeta.glob(f"{PREFIJO}*{SUFIJO}"))
+    for vieja in copias[:-maximo]:
         try:
             vieja.unlink()
         except OSError:
             pass  # que no se pueda borrar una vieja no invalida la nueva
+
+
+def _podar() -> None:
+    """Deja sólo las copias más recientes."""
+    _podar_carpeta(CARPETA, MAXIMO_A_CONSERVAR)
 
 
 def listar() -> List[dict]:

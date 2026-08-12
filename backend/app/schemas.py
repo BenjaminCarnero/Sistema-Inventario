@@ -28,6 +28,17 @@ class Usuario(UsuarioBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class CambioDePinPropio(BaseModel):
+    """Cambio del PIN propio: hay que saber el actual para poder cambiarlo."""
+    pin_actual: str
+    pin_nuevo: str
+
+
+class ReinicioDePin(BaseModel):
+    """Reinicio hecho por un administrador, para el que se olvidó el suyo."""
+    pin_nuevo: str
+
+
 class CategoriaBase(BaseModel):
     nombre: str
 

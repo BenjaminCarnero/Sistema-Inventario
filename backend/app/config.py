@@ -44,6 +44,12 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
     ]
 
+    # Segunda copia de cada respaldo, fuera de este disco. Una copia que vive
+    # al lado de la base no protege del caso más probable, que es que ese disco
+    # se rompa o que se pierda la computadora. Apuntala a una carpeta que ya se
+    # sincronice sola (Drive, OneDrive) o a un pendrive que quede siempre puesto.
+    RESPALDO_EXTERNO: str = ""
+
     ENTORNO: str = "desarrollo"  # "produccion" activa los chequeos estrictos
 
     class Config:

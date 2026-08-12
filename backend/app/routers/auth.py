@@ -190,6 +190,91 @@ def update_user(
     return db_user
 
 
+@router.put("/me/pin", status_code=status.HTTP_204_NO_CONTENT)
+def cambiar_mi_pin(
+    cambio: schemas.CambioDePinPropio,
+    request: Request,
+    db: Session = Depends(database.get_db),
+    current_user: models.Usuario = Depends(dependencies.get_current_active_user),
+):
+    """Cambio del PIN propio.
+
+    Sin esto, un PIN visto por encima del hombro sólo se podía sacar de
+    circulación borrando la cuenta y creándola de nuevo, lo que le cambia el id
+    y desengancha del historial las ventas de esa persona.
+    """
+    ip = request.client.host if request.client else "desconocida"
+
+    # El PIN actual se pide para que un equipo dejado abierto no alcance para
+    # quedarse con la cuenta. Cuenta como intento fallido, así el mismo freno
+    # que protege al login protege también a este endpoint.
+    bloqueo = auth.segundos_de_bloqueo(db, current_user.nombre, ip)
+    if bloqueo:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Demasiados intentos fallidos. Probá de nuevo en {bloqueo} segundos.",
+        )
+
+    if not auth.verificar_credencial(cambio.pin_actual, current_user.pin_acceso):
+        auth.registrar_intento_fallido(db, current_user.nombre, ip)
+        raise HTTPException(status_code=400, detail="El PIN actual no es correcto")
+
+    minimo = _pin_minimo(current_user.rol_id)
+    if len(cambio.pin_nuevo or "") < minimo:
+        raise HTTPException(
+            status_code=400,
+            detail=f"El PIN debe tener al menos {minimo} caracteres para este rol",
+        )
+    if cambio.pin_nuevo == cambio.pin_actual:
+        raise HTTPException(status_code=400, detail="El PIN nuevo tiene que ser distinto del actual")
+
+    auth.limpiar_intentos(db, current_user.nombre, ip)
+    current_user.pin_acceso = auth.get_password_hash(cambio.pin_nuevo)
+
+    # Queda el registro de que se cambió, nunca el PIN en sí
+    auditoria.registrar(
+        db, current_user, "usuario", "MODIFICAR",
+        entidad_id=current_user.id, entidad_nombre=current_user.nombre,
+        campo="pin_acceso", valor_anterior="(oculto)", valor_nuevo="(cambiado por el propio usuario)",
+    )
+    db.commit()
+    return
+
+
+@router.put("/users/{user_id}/pin", status_code=status.HTTP_204_NO_CONTENT)
+def reiniciar_pin(
+    user_id: int,
+    cambio: schemas.ReinicioDePin,
+    db: Session = Depends(database.get_db),
+    current_user: models.Usuario = Depends(get_admin_user),
+):
+    """Reinicio del PIN de otra cuenta: para el cajero que se lo olvidó."""
+    db_user = db.query(models.Usuario).filter(models.Usuario.id == user_id).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    minimo = _pin_minimo(db_user.rol_id)
+    if len(cambio.pin_nuevo or "") < minimo:
+        raise HTTPException(
+            status_code=400,
+            detail=f"El PIN debe tener al menos {minimo} caracteres para este rol",
+        )
+
+    db_user.pin_acceso = auth.get_password_hash(cambio.pin_nuevo)
+
+    # Un PIN reiniciado por otro deja bloqueada a la cuenta si arrastraba
+    # fallos, así que se limpian junto con el cambio.
+    auth.limpiar_intentos_de_cuenta(db, db_user.nombre)
+
+    auditoria.registrar(
+        db, current_user, "usuario", "MODIFICAR",
+        entidad_id=db_user.id, entidad_nombre=db_user.nombre,
+        campo="pin_acceso", valor_anterior="(oculto)", valor_nuevo="(reiniciado por un administrador)",
+    )
+    db.commit()
+    return
+
+
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user(
     user_id: int,

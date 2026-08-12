@@ -56,3 +56,6 @@ frontend/certs/
 
 # Copias de la base: traen las ventas y los PIN hasheados
 backend/respaldos/
+
+# Registro de errores del backend: es de esta máquina y puede tener datos del local
+backend/logs/

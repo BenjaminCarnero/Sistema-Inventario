@@ -2,6 +2,7 @@
 from datetime import date, datetime, timedelta, timezone
 
 from app import auth, models, respaldos
+from app.config import settings
 from app.routers.reportes import rango_local_en_utc, fecha_local_de
 from tests.conftest import crear_usuario, token_de, cabecera
 
@@ -49,6 +50,56 @@ class TestRespaldos:
         """La copia trae las ventas y los PIN hasheados de todos."""
         assert client.get("/respaldos/", headers=auth_cajero).status_code == 403
         assert client.post("/respaldos/", headers=auth_cajero).status_code == 403
+
+
+class TestRespaldoExterno:
+    """Una copia al lado de la base no protege de que se rompa ese disco."""
+
+    def test_deja_una_segunda_copia_afuera(self, client, producto, tmp_path, monkeypatch):
+        local, afuera = tmp_path / "local", tmp_path / "afuera"
+        local.mkdir()
+        monkeypatch.setattr(respaldos, "CARPETA", local)
+        monkeypatch.setattr(settings, "RESPALDO_EXTERNO", str(afuera))
+
+        ruta = respaldos.crear("prueba")
+
+        copia_externa = afuera / ruta.name
+        assert copia_externa.exists()
+        assert copia_externa.stat().st_size == ruta.stat().st_size
+
+    def test_sin_carpeta_configurada_no_hace_nada(self, client, tmp_path, monkeypatch):
+        monkeypatch.setattr(respaldos, "CARPETA", tmp_path)
+        monkeypatch.setattr(settings, "RESPALDO_EXTERNO", "")
+
+        assert respaldos.crear("prueba") is not None
+
+    def test_si_la_carpeta_externa_falla_el_respaldo_local_igual_se_hace(
+        self, client, tmp_path, monkeypatch
+    ):
+        """El pendrive puede no estar puesto. Perder el cierre de caja por eso
+        sería peor que quedarse sin la copia de afuera."""
+        local = tmp_path / "local"
+        local.mkdir()
+        monkeypatch.setattr(respaldos, "CARPETA", local)
+        # Un archivo donde se espera una carpeta: mkdir falla
+        ocupado = tmp_path / "ocupado"
+        ocupado.write_text("no soy una carpeta")
+        monkeypatch.setattr(settings, "RESPALDO_EXTERNO", str(ocupado))
+
+        ruta = respaldos.crear("prueba")
+        assert ruta is not None and ruta.exists()
+
+    def test_conserva_solo_las_ultimas_afuera(self, client, tmp_path, monkeypatch):
+        local, afuera = tmp_path / "local", tmp_path / "afuera"
+        local.mkdir()
+        monkeypatch.setattr(respaldos, "CARPETA", local)
+        monkeypatch.setattr(settings, "RESPALDO_EXTERNO", str(afuera))
+        monkeypatch.setattr(respaldos, "MAXIMO_EXTERNO", 2)
+
+        for _ in range(5):
+            respaldos.crear("prueba")
+
+        assert len(list(afuera.glob("applify_*.db"))) == 2
 
     def test_no_se_puede_pedir_un_archivo_de_afuera(self, client, auth_admin):
         """Sin este chequeo el nombre serviría para bajarse el .env."""

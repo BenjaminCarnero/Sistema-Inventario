@@ -1,7 +1,34 @@
+import logging
+from logging.handlers import RotatingFileHandler
+
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from app.config import settings, es_produccion
+from app.config import BASE_DIR, settings, es_produccion
+
+# --- Registro de errores ---------------------------------------------------
+# Sin esto los errores salen por la consola y ahí mueren: en una PC de
+# mostrador, con el backend minimizado o corriendo como servicio, no los ve
+# nadie. Cuando el cajero dice "me tiró error", esto es lo único que queda.
+#
+# Rota a los 2 MB y guarda 5 archivos: alcanza para varias semanas de un
+# comercio y no llena el disco solo. Nunca se escriben PIN ni tokens.
+CARPETA_LOGS = BASE_DIR / "logs"
+CARPETA_LOGS.mkdir(parents=True, exist_ok=True)
+
+_archivo = RotatingFileHandler(
+    CARPETA_LOGS / "backend.log", maxBytes=2_000_000, backupCount=5, encoding="utf-8",
+)
+_archivo.setFormatter(logging.Formatter(
+    "%(asctime)s %(levelname)s %(name)s: %(message)s"
+))
+
+_raiz = logging.getLogger()
+_raiz.setLevel(logging.INFO)
+_raiz.addHandler(_archivo)
+# Los errores de uvicorn también van al archivo, que es donde se busca después
+for _nombre in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+    logging.getLogger(_nombre).addHandler(_archivo)
 
 # En producción no se publica la documentación interactiva: le da a un atacante
 # el mapa completo de la API (rutas, parámetros y esquemas) sin esfuerzo.

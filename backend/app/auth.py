@@ -114,6 +114,20 @@ def registrar_intento_fallido(db, usuario: str, ip: str) -> None:
     db.commit()
 
 
+def limpiar_intentos_de_cuenta(db, usuario: str) -> None:
+    """Borra los fallos de una cuenta, venga de la IP que venga.
+
+    Se usa al reiniciarle el PIN a alguien: si arrastraba intentos fallidos,
+    quedaría bloqueado justo con el PIN nuevo que le acaban de dar.
+    """
+    from app import models
+
+    marca = f"{_limpiar(usuario)}|"
+    db.query(models.IntentoLogin).filter(
+        models.IntentoLogin.usuario.startswith(marca)
+    ).delete(synchronize_session=False)
+
+
 def limpiar_intentos(db, usuario: str, ip: str) -> None:
     """Un acceso correcto borra el historial de fallos de ese usuario.
 

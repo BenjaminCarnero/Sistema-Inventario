@@ -469,6 +469,108 @@ class TestIdempotencia:
         assert producto.stock_actual == stock
 
 
+class TestCambioDePin:
+    """Sin esto, un PIN visto por encima del hombro sólo se sacaba de
+    circulación borrando la cuenta, lo que le cambia el id y desengancha del
+    historial las ventas de esa persona."""
+
+    def test_el_cajero_cambia_el_suyo_y_entra_con_el_nuevo(self, client, auth_cajero, cajero):
+        r = client.put("/auth/me/pin", headers=auth_cajero, json={
+            "pin_actual": "cajero123", "pin_nuevo": "9876",
+        })
+        assert r.status_code == 204, r.text
+
+        assert client.post("/auth/login", data={"username": "cajero", "password": "cajero123"}).status_code == 401
+        assert client.post("/auth/login", data={"username": "cajero", "password": "9876"}).status_code == 200
+
+    def test_hace_falta_saber_el_actual(self, client, auth_cajero, cajero):
+        """Un equipo dejado abierto no puede alcanzar para quedarse la cuenta."""
+        r = client.put("/auth/me/pin", headers=auth_cajero, json={
+            "pin_actual": "el-que-no-es", "pin_nuevo": "9876",
+        })
+        assert r.status_code == 400
+        assert client.post("/auth/login", data={"username": "cajero", "password": "cajero123"}).status_code == 200
+
+    def test_el_nuevo_respeta_el_largo_del_rol(self, client, auth_admin, admin):
+        r = client.put("/auth/me/pin", headers=auth_admin, json={
+            "pin_actual": "admin123", "pin_nuevo": "1234",
+        })
+        assert r.status_code == 400
+
+    def test_no_se_puede_poner_el_mismo(self, client, auth_cajero, cajero):
+        r = client.put("/auth/me/pin", headers=auth_cajero, json={
+            "pin_actual": "cajero123", "pin_nuevo": "cajero123",
+        })
+        assert r.status_code == 400
+
+    def test_el_admin_le_reinicia_el_pin_al_que_se_lo_olvido(self, client, auth_admin, cajero):
+        r = client.put(f"/auth/users/{cajero.id}/pin", headers=auth_admin, json={"pin_nuevo": "4321"})
+        assert r.status_code == 204, r.text
+        assert client.post("/auth/login", data={"username": "cajero", "password": "4321"}).status_code == 200
+
+    def test_reiniciar_el_pin_destraba_la_cuenta_frenada(self, client, auth_admin, cajero):
+        """Si arrastraba fallos, quedaría bloqueado justo con el PIN nuevo."""
+        for _ in range(6):
+            client.post("/auth/login", data={"username": "cajero", "password": "mal"})
+        assert client.post("/auth/login", data={"username": "cajero", "password": "cajero123"}).status_code == 429
+
+        client.put(f"/auth/users/{cajero.id}/pin", headers=auth_admin, json={"pin_nuevo": "4321"})
+        assert client.post("/auth/login", data={"username": "cajero", "password": "4321"}).status_code == 200
+
+    def test_un_cajero_no_le_cambia_el_pin_a_otro(self, client, auth_cajero, admin):
+        r = client.put(f"/auth/users/{admin.id}/pin", headers=auth_cajero, json={"pin_nuevo": "loquesea99"})
+        assert r.status_code == 403
+
+    def test_el_pin_nunca_queda_en_la_auditoria(self, client, auth_cajero, cajero, db):
+        client.put("/auth/me/pin", headers=auth_cajero, json={
+            "pin_actual": "cajero123", "pin_nuevo": "secreto-9876",
+        })
+        entradas = db.query(models.Auditoria).all()
+        assert entradas, "el cambio de PIN tiene que quedar registrado"
+        for entrada in entradas:
+            assert "secreto-9876" not in f"{entrada.valor_anterior}{entrada.valor_nuevo}"
+
+
+class TestStockConcurrente:
+    def test_el_mismo_producto_en_dos_lineas_no_esquiva_el_control_de_stock(
+        self, client, auth_cajero, producto, sin_iva, db
+    ):
+        """La resta la hace la base, así que el objeto en memoria queda viejo:
+        sin llevar la cuenta aparte, la segunda línea se validaba contra el
+        stock inicial y el control se saltaba solo."""
+        db.add(models.Configuracion(
+            clave="permitir_stock_negativo", valor="false", tipo="boolean", categoria="ventas",
+        ))
+        producto.stock_actual = 3
+        db.commit()
+
+        r = client.post("/ventas/", headers=auth_cajero, json={
+            "metodo_pago": "EFECTIVO",
+            "detalles": [
+                {"producto_id": producto.id, "cantidad": 2, "precio_unitario": 1000},
+                {"producto_id": producto.id, "cantidad": 2, "precio_unitario": 1000},
+            ],
+        })
+        assert r.status_code == 400
+        db.refresh(producto)
+        assert producto.stock_actual == 3
+
+    def test_el_mismo_producto_repetido_descuenta_todo(
+        self, client, auth_cajero, producto, sin_iva, db
+    ):
+        r = client.post("/ventas/", headers=auth_cajero, json={
+            "metodo_pago": "EFECTIVO",
+            "detalles": [
+                {"producto_id": producto.id, "cantidad": 2, "precio_unitario": 1000},
+                {"producto_id": producto.id, "cantidad": 3, "precio_unitario": 1000},
+            ],
+        })
+        assert r.status_code == 201, r.text
+        assert r.json()["total"] == 5000
+        db.refresh(producto)
+        assert producto.stock_actual == 95
+
+
 class TestCobroPorQR:
     """El cajero declara el pago; el servidor lo comprueba.
 
