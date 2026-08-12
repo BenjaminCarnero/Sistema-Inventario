@@ -8,7 +8,7 @@ const API_URL = '';
  * justamente lo que después se guarda como motivo del rechazo para que lo
  * lea el encargado.
  */
-function detalleLegible(detail: unknown): string {
+function detalleLegible(detail: unknown, porDefecto = 'Error sincronizando venta'): string {
   if (typeof detail === 'string' && detail) return detail;
   if (Array.isArray(detail)) {
     const mensajes = detail
@@ -16,7 +16,7 @@ function detalleLegible(detail: unknown): string {
       .filter(Boolean);
     if (mensajes.length) return mensajes.join('; ');
   }
-  return 'Error sincronizando venta';
+  return porDefecto;
 }
 
 export const api = {
@@ -73,6 +73,35 @@ export const api = {
     if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
     if (!res.ok) throw new Error('Error actualizando usuario');
     return res.json();
+  },
+
+  /** Cambio del PIN propio. Hace falta el actual: un equipo dejado abierto no
+   *  alcanza para quedarse con la cuenta. */
+  async cambiarMiPin(pin_actual: string, pin_nuevo: string) {
+    const res = await fetch(`${API_URL}/auth/me/pin`, {
+      method: 'PUT',
+      headers: this.headers,
+      body: JSON.stringify({ pin_actual, pin_nuevo })
+    });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) {
+      const cuerpo = await res.json().catch(() => null);
+      throw new Error(detalleLegible(cuerpo?.detail, 'No se pudo cambiar el PIN'));
+    }
+  },
+
+  /** Reinicio del PIN de otra cuenta, para el que se lo olvidó. Sólo admin. */
+  async reiniciarPinUsuario(id: number, pin_nuevo: string) {
+    const res = await fetch(`${API_URL}/auth/users/${id}/pin`, {
+      method: 'PUT',
+      headers: this.headers,
+      body: JSON.stringify({ pin_nuevo })
+    });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) {
+      const cuerpo = await res.json().catch(() => null);
+      throw new Error(detalleLegible(cuerpo?.detail, 'No se pudo reiniciar el PIN'));
+    }
   },
 
   async deleteUsuario(id: number) {

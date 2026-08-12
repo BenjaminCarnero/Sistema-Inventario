@@ -109,6 +109,9 @@ function Admin() {
   const [newUser, setNewUser] = useState({ nombre: '', pin_acceso: '', rol_id: 3 });
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [loadingUsuarios, setLoadingUsuarios] = useState(true);
+  // Reinicio del PIN de otro: `usuario` cargado abre el modal
+  const [pinReset, setPinReset] = useState<{ usuario: any | null; nuevo: string }>({ usuario: null, nuevo: '' });
+  const [miPin, setMiPin] = useState({ actual: '', nuevo: '' });
 
   // Descuentos
   const [descuentos, setDescuentos] = useState<any[]>([]);
@@ -764,6 +767,30 @@ function Admin() {
       showToast(`Usuario ${u.nombre} eliminado`, 'success');
     } catch (err: any) {
       showToast("Error eliminando usuario: " + err.message, 'error');
+    }
+  };
+
+  /** Reinicio del PIN de otra cuenta: el cajero que se lo olvidó. */
+  const handleReiniciarPin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pinReset.usuario) return;
+    try {
+      await api.reiniciarPinUsuario(pinReset.usuario.id, pinReset.nuevo);
+      showToast(`PIN de ${pinReset.usuario.nombre} reiniciado`, 'success');
+      setPinReset({ usuario: null, nuevo: '' });
+    } catch (err: any) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  const handleCambiarMiPin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.cambiarMiPin(miPin.actual, miPin.nuevo);
+      showToast('Tu PIN quedó cambiado. Usalo la próxima vez que entres.', 'success');
+      setMiPin({ actual: '', nuevo: '' });
+    } catch (err: any) {
+      showToast(err.message, 'error');
     }
   };
 
@@ -2962,6 +2989,48 @@ function Admin() {
               </form>
             </div>
 
+            {/* Cambiar el PIN propio. Sin esto, un PIN que alguien vio por
+                encima del hombro sólo se sacaba de circulación borrando la
+                cuenta, y eso desengancha del historial sus ventas pasadas. */}
+            <div className="glass-card p-6 mt-8 max-w-2xl">
+              <h3 className="text-xl font-semibold mb-2 border-b border-white/10 pb-4">Cambiar mi PIN</h3>
+              <p className="text-sm text-text-muted mb-6">
+                Si alguien vio tu PIN, cambialo acá. Se pide el actual para que
+                nadie pueda hacerlo desde un equipo que dejaste abierto.
+              </p>
+              <form onSubmit={handleCambiarMiPin} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="mi-pin-actual" className="block text-sm text-text-secondary mb-1">PIN actual</label>
+                    <input
+                      id="mi-pin-actual"
+                      type="password" required autoComplete="current-password"
+                      className="glass-input w-full p-3 rounded-lg"
+                      value={miPin.actual}
+                      onChange={e => setMiPin({ ...miPin, actual: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="mi-pin-nuevo" className="block text-sm text-text-secondary mb-1">PIN nuevo</label>
+                    <input
+                      id="mi-pin-nuevo"
+                      type="password" required autoComplete="new-password"
+                      className="glass-input w-full p-3 rounded-lg"
+                      value={miPin.nuevo}
+                      onChange={e => setMiPin({ ...miPin, nuevo: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-text-muted">
+                  El largo mínimo depende del rol: 8 para administrador, 6 para
+                  encargado y 4 para cajero.
+                </p>
+                <button type="submit" className="bg-brand hover:bg-brand-hover text-white px-6 py-3 rounded-lg font-bold transition-colors w-full md:w-auto">
+                  Cambiar mi PIN
+                </button>
+              </form>
+            </div>
+
             <div className="glass-card p-6 mt-8 max-w-4xl">
               <h3 className="text-xl font-semibold mb-6 border-b border-white/10 pb-4">Lista de Usuarios</h3>
               {loadingUsuarios ? (
@@ -3002,6 +3071,9 @@ function Admin() {
                                   <button onClick={() => handleToggleRolUser(u)} className="text-brand-light hover:underline text-xs mr-4">
                                     Cambiar Rol
                                   </button>
+                                  <button onClick={() => setPinReset({ usuario: u, nuevo: '' })} className="text-brand-light hover:underline text-xs mr-4">
+                                    Reiniciar PIN
+                                  </button>
                                   <button onClick={() => handleDeleteUser(u)} className="text-status-error hover:underline text-xs">
                                     Eliminar
                                   </button>
@@ -3030,6 +3102,9 @@ function Admin() {
                             <button onClick={() => handleToggleRolUser(u)} className="text-brand-light hover:underline text-xs">
                               Cambiar Rol
                             </button>
+                            <button onClick={() => setPinReset({ usuario: u, nuevo: '' })} className="text-brand-light hover:underline text-xs">
+                              Reiniciar PIN
+                            </button>
                             <button onClick={() => handleDeleteUser(u)} className="text-status-error hover:underline text-xs">
                               Eliminar
                             </button>
@@ -3046,6 +3121,51 @@ function Admin() {
           </motion.div>
         )}
       </main>
+
+      {/* Reinicio del PIN de otra cuenta */}
+      {pinReset.usuario && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+            className="glass-card p-6 max-w-sm w-full"
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-white">Reiniciar PIN de {pinReset.usuario.nombre}</h3>
+              <button
+                onClick={() => setPinReset({ usuario: null, nuevo: '' })}
+                className="text-text-secondary hover:text-white p-1 hover:bg-white/10 rounded-lg"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <p className="text-sm text-text-secondary mb-4 leading-relaxed">
+              Elegí un PIN nuevo y decíselo en persona. Si la cuenta estaba
+              frenada por intentos fallidos, esto también la destraba.
+            </p>
+            <form onSubmit={handleReiniciarPin} className="space-y-4">
+              <input
+                type="password" required autoFocus autoComplete="new-password"
+                placeholder="PIN nuevo"
+                className="glass-input w-full p-3 rounded-lg"
+                value={pinReset.nuevo}
+                onChange={e => setPinReset({ ...pinReset, nuevo: e.target.value })}
+              />
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPinReset({ usuario: null, nuevo: '' })}
+                  className="flex-1 bg-neutral-bg3 hover:bg-neutral-bg4 text-text-secondary py-3 rounded-xl font-bold transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button type="submit" className="flex-[2] bg-brand hover:bg-brand-hover text-white py-3 rounded-xl font-bold transition-colors">
+                  Guardar PIN nuevo
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
 
       {/* Barcode Modal */}
       {barcodeProduct && (

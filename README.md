@@ -29,6 +29,8 @@ campo de código y con Enter se encadena toda la venta.
 - Reportes: recaudación diaria, productos más vendidos, rentabilidad y arqueos de caja
 - Exportación a Excel por rango de fechas
 - Gestión de usuarios con tres roles: administrador, encargado y cajero
+- Cada uno cambia su propio PIN, y el administrador reinicia el de quien se lo olvidó
+- Copias de la base en cada cierre de caja, con duplicado fuera del equipo
 
 **Configurable sin tocar código**
 - Logo, colores y nombre del comercio (white-label)
@@ -320,18 +322,24 @@ Antes de usarlo con plata de verdad, en el `.env`:
 ENTORNO=produccion
 SECRET_KEY=<una clave larga y propia>
 CORS_ORIGINS=["https://tu-dominio.com"]
+FRONTEND_URL=https://tu-dominio.com
+RESPALDO_EXTERNO=C:\Users\vos\OneDrive\respaldos-pos
 ```
 
-Con `ENTORNO=produccion` el arranque **falla** si falta la `SECRET_KEY` o si
-`CORS_ORIGINS` está en `"*"`, se oculta la documentación de la API y se activa
-HSTS.
+Con `ENTORNO=produccion` el arranque **falla** si falta la `SECRET_KEY`, si
+`CORS_ORIGINS` está en `"*"` o si `FRONTEND_URL` quedó apuntando a localhost;
+además se oculta la documentación de la API y se activa HSTS.
 
 Además:
 
 - Serví el frontend por **HTTPS**. Sin eso, la cámara del escáner no funciona en
   la mayoría de los navegadores.
-- Hacé **copias de la base** (`backend/applify.db`). Es un archivo: copiarlo
-  alcanza.
+- Configurá `RESPALDO_EXTERNO`. El sistema ya guarda una copia de la base en
+  cada cierre de caja, pero esa copia vive en el mismo disco que la base y no
+  sirve si ese disco se rompe. Con esto queda además un duplicado en una
+  carpeta sincronizada o en un pendrive.
+- Mirá `backend/logs/` cuando algo falle: ahí quedan los errores del servidor.
+  Antes salían por consola y se perdían.
 - Para varias cajas en simultáneo conviene pasar a SQL Server o PostgreSQL
   cambiando `DATABASE_URL`.
 
@@ -369,13 +377,26 @@ venv\Scripts\activate
 pytest
 ```
 
+Del lado del frontend, los tests cubren el flujo por teclado del POS de punta a
+punta —el lector carga el producto, Enter encadena la venta, y la venta cobrada
+queda guardada en el equipo aunque no haya servidor— más el saneo de los campos
+de dinero y la lógica que decide qué hacer con una venta que el servidor
+rechazó.
+
+```bash
+cd frontend
+pnpm test
+```
+
 ### Qué NO subir nunca al repositorio
 
 - `backend/.env` — la clave de firma y el token de Mercado Pago
 - `backend/applify.db` — las ventas y los PIN hasheados de los usuarios. Un PIN
   de 4 dígitos se rompe en segundos si alguien consigue el hash.
+- `backend/respaldos/` — copias de la base, con los mismos datos adentro
+- `backend/logs/` — errores del servidor, que pueden traer datos del local
 
-Las dos cosas ya están en el `.gitignore`.
+Todo eso ya está en el `.gitignore`.
 
 ---
 
@@ -394,8 +415,11 @@ backend/
     routers/              auth, productos, categorias, proveedores, ventas,
                           devoluciones, stock, pedidos, cajas, reportes,
                           pagos, descuentos y configuracion
+    respaldos.py          Copias de la base, locales y fuera del equipo
   alembic/versions/       Migraciones
   tests/                  Tests de los cálculos de plata y de seguridad
+  logs/                   Errores del servidor (rotan solos)
+  respaldos/              Copias de la base
   seed_admin.py           Crea el primer administrador
 
 frontend/src/
@@ -403,6 +427,8 @@ frontend/src/
   Admin.tsx               Backoffice
   api.ts                  Cliente HTTP
   db.ts                   Base local (IndexedDB) para el modo sin conexión
+  sincronizacion.ts       Qué hacer con una venta que el servidor rechazó
+  tests/                  Tests del flujo por teclado del POS
   cajaLocal.ts            Turno de caja recordado en el equipo
   useConexion.ts          Detecta si el servidor responde de verdad
   components/             Configuración, toasts, gráficos y logo
