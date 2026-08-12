@@ -183,6 +183,21 @@ export const api = {
     return res.json();
   },
 
+  /**
+   * Catálogo completo para el POS.
+   *
+   * Va por su propio endpoint y no por `getProductos`, que devuelve una página
+   * de 100: el POS reemplaza su catálogo local con lo que reciba, así que con
+   * una página incompleta los productos que faltaban dejaban de poder venderse
+   * y el lector sólo decía "producto no encontrado".
+   */
+  async getCatalogo() {
+    const res = await fetch(`${API_URL}/productos/catalogo`, { headers: this.headers });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw new Error('Error obteniendo el catálogo');
+    return res.json();
+  },
+
   async createProducto(producto: {codigo_barras: string, nombre: string, precio_venta: number, costo: number, stock_actual: number, imagen_url?: string | null, categoria_id?: number | null, proveedor_id?: number | null, cantidad_pedido_habitual?: number | null}) {
     const res = await fetch(`${API_URL}/productos/`, {
       method: 'POST',

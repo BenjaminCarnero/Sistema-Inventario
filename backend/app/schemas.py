@@ -107,6 +107,24 @@ class Producto(ProductoBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ProductoDelCatalogo(BaseModel):
+    """Lo mínimo para vender un producto.
+
+    El POS necesita el catálogo COMPLETO para poder cobrar sin conexión, así
+    que esta versión viaja sin el costo (que es el margen del negocio y no va
+    al equipo del cajero) y sin los campos que sólo usa el backoffice.
+    """
+    id: int
+    codigo_barras: str
+    nombre: str
+    precio_venta: float
+    stock_actual: int
+    imagen_url: Optional[str] = None
+    categoria_id: Optional[int] = None
+    proveedor_id: Optional[int] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
 class DetalleVentaBase(BaseModel):
     producto_id: int
     cantidad: int

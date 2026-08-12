@@ -155,7 +155,7 @@ function POS() {
       
       // Sincronizar catálogo para que la DB local no esté vacía
       try {
-        await sincronizarCatalogo(await api.getProductos());
+        await sincronizarCatalogo(await api.getCatalogo());
       } catch (syncErr: any) {
         console.warn("Error al sincronizar catálogo al inicio:", syncErr);
         showToast("No se pudo actualizar el catálogo. Se usará el guardado localmente.", 'error');

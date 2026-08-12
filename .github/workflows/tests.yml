@@ -1,0 +1,72 @@
+name: Tests
+
+# Con instancias desplegadas en comercios, romper algo sin enterarse deja de
+# ser un susto y pasa a ser un llamado a las nueve de la mañana.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - run: pip install -r requirements.txt
+
+      - name: Tests
+        run: pytest -q
+        env:
+          # La misma configuración que usa conftest.py, por si algún test
+          # llegara a leerla antes de que se cree la base temporal.
+          SECRET_KEY: clave-solo-para-ci-no-usar-en-produccion
+          ENTORNO: desarrollo
+
+      - name: Las migraciones llegan hasta la última
+        run: |
+          alembic upgrade head
+          alembic downgrade base
+          alembic upgrade head
+        env:
+          DATABASE_URL: sqlite:///./ci.db
+          SECRET_KEY: clave-solo-para-ci-no-usar-en-produccion
+          ENTORNO: desarrollo
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Tipos
+        run: pnpm exec tsc --noEmit -p tsconfig.app.json
+
+      - name: Tests
+        run: pnpm test
+
+      - name: Compila
+        run: pnpm build

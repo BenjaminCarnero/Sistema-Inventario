@@ -145,6 +145,53 @@ class TestStockConcurrente:
         assert producto.stock_actual == 120  # 100 + 10 + 10
 
 
+class TestCatalogoCompleto:
+    """El POS reemplaza su catálogo local con lo que le da el servidor.
+
+    Con el endpoint paginado devolviendo 100 por defecto, un kiosco con 350
+    productos tenía 250 imposibles de vender: el lector decía "producto no
+    encontrado" y nada avisaba que faltaba medio catálogo.
+    """
+
+    def _cargar(self, db, cuantos: int):
+        for numero in range(cuantos):
+            db.add(models.Producto(
+                codigo_barras=f"779{numero:010d}",
+                nombre=f"Producto {numero}",
+                precio_venta=100.0,
+                costo=60.0,
+                stock_actual=10,
+            ))
+        db.commit()
+
+    def test_devuelve_todo_el_catalogo_aunque_pase_de_cien(self, client, auth_cajero, db):
+        self._cargar(db, 250)
+
+        r = client.get("/productos/catalogo", headers=auth_cajero)
+        assert r.status_code == 200
+        assert len(r.json()) == 250
+
+    def test_el_ultimo_producto_tambien_esta(self, client, auth_cajero, db):
+        """El que se cargó último es justamente el que se perdía."""
+        self._cargar(db, 150)
+
+        codigos = {p["codigo_barras"] for p in client.get("/productos/catalogo", headers=auth_cajero).json()}
+        assert "7790000000149" in codigos
+
+    def test_el_catalogo_no_lleva_el_costo(self, client, auth_cajero, producto):
+        """El margen del negocio no tiene por qué quedar en la tablet del cajero."""
+        catalogo = client.get("/productos/catalogo", headers=auth_cajero).json()
+        assert catalogo
+        assert "costo" not in catalogo[0]
+
+    def test_el_listado_paginado_sigue_teniendo_tope(self, client, auth_admin, db):
+        """El backoffice pagina; lo que no puede es cortar en silencio a 100."""
+        self._cargar(db, 250)
+
+        assert len(client.get("/productos/", headers=auth_admin).json()) == 250
+        assert client.get("/productos/?limit=99999", headers=auth_admin).status_code == 422
+
+
 class TestRestauracion:
     def test_se_puede_restaurar_lo_que_se_respaldo(self, client, auth_admin, producto, tmp_path, monkeypatch):
         """Un respaldo que nadie probó restaurar no es un respaldo."""

@@ -595,7 +595,7 @@ function Admin() {
 
   const syncCatalog = async (avisar = false) => {
     try {
-      const cantidad = await sincronizarCatalogo(await api.getProductos());
+      const cantidad = await sincronizarCatalogo(await api.getCatalogo());
       if (avisar) showToast(`Catálogo sincronizado (${cantidad} productos)`, 'success');
     } catch (err: any) {
       console.error("Error al sincronizar: " + err.message);

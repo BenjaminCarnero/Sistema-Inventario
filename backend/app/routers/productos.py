@@ -1,5 +1,5 @@
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from app import models, schemas, database, dependencies, auditoria
 
@@ -52,10 +52,31 @@ def _validar_producto(datos: dict, db: Session = None):
         raise HTTPException(status_code=400, detail="El nombre no puede estar vacío")
 
 
+@router.get("/catalogo", response_model=List[schemas.ProductoDelCatalogo])
+def catalogo_completo(
+    db: Session = Depends(database.get_db),
+    current_user: models.Usuario = Depends(dependencies.get_current_active_user),
+):
+    """Catálogo entero, para que el POS pueda vender sin conexión.
+
+    Va sin paginar a propósito. El POS guarda esto en el equipo y es lo único
+    que tiene para reconocer un código de barras cuando se cae la red: si le
+    falta un producto, ese producto no se puede vender y el cajero sólo ve
+    "producto no encontrado".
+
+    Antes el POS usaba `GET /productos/`, que devuelve 100 por defecto. Un
+    comercio con más de 100 productos tenía el resto del catálogo invisible en
+    la caja, sin ningún aviso.
+    """
+    return db.query(models.Producto).order_by(models.Producto.id).all()
+
+
 @router.get("/", response_model=List[schemas.Producto])
 def read_productos(
     skip: int = 0,
-    limit: int = 100,
+    # Con un tope implícito de 100, el backoffice mostraba el catálogo cortado
+    # y parecía que faltaban productos.
+    limit: int = Query(500, ge=1, le=5000),
     db: Session = Depends(database.get_db),
     current_user: models.Usuario = Depends(dependencies.get_current_active_user),
 ):
