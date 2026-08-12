@@ -11,6 +11,9 @@
 *.db-journal
 *.sqlite
 *.sqlite3
+# Copias hechas a mano antes de migrar: "applify.db.antes-de-xxxx" y parecidas.
+# Sin esto no las tapa el "*.db" de arriba y terminan en un commit.
+*.db.*
 !**/ejemplo.db
 
 # --- Python -----------------------------------------------------------------
