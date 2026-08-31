@@ -50,6 +50,36 @@ class Settings(BaseSettings):
     # sincronice sola (Drive, OneDrive) o a un pendrive que quede siempre puesto.
     RESPALDO_EXTERNO: str = ""
 
+    # Carpeta del frontend ya compilado. Si existe, la sirve la misma
+    # aplicación y el comercio queda en un solo contenedor y un solo puerto.
+    # Vacío = se busca en ../frontend/dist, que es donde queda al compilar.
+    FRONTEND_DIST: str = ""
+
+    # Cuántos proxies propios hay delante de la aplicación (nginx, Caddy, el
+    # balanceador del hosting). Con 0 la IP sale del socket, que es lo correcto
+    # cuando la aplicación se expone directo.
+    #
+    # Importa porque el freno de fuerza bruta cuenta por IP: detrás de un proxy
+    # sin configurar, TODAS las peticiones llegan con la IP del proxy, así que
+    # el freno por barrido de cuentas bloquearía a todo el local y el freno por
+    # cuenta se volvería inútil. Se cuenta desde la derecha de
+    # `X-Forwarded-For` a propósito: el cliente puede inventar las entradas de
+    # la izquierda, pero no las que agrega nuestro propio proxy.
+    PROXIES_CONFIABLES: int = 0
+
+    # Techo de peticiones por IP y por minuto, fuera del login (que tiene su
+    # propio freno, más estricto y persistido). 0 lo desactiva.
+    LIMITE_PETICIONES_POR_MINUTO: int = 300
+
+    # Zona horaria del comercio, en formato IANA ("America/Argentina/Buenos_Aires").
+    # Es la que define dónde empieza y termina "el día" para los arqueos y los
+    # reportes. Vacío = la del reloj del servidor.
+    #
+    # Importa cuando el servidor no está en el local: un VPS en UTC corta el
+    # día a las 21:00 hora argentina, así que las ventas de la noche caían en
+    # el reporte del día siguiente y el arqueo del turno no cerraba.
+    ZONA_HORARIA: str = ""
+
     ENTORNO: str = "desarrollo"  # "produccion" activa los chequeos estrictos
 
     class Config:

@@ -24,11 +24,30 @@ jobs:
 
       - run: pip install -r requirements.txt
 
-      - name: Tests
+      - name: Tests (sólo API, sin frontend compilado)
         run: pytest -q
         env:
           # La misma configuración que usa conftest.py, por si algún test
           # llegara a leerla antes de que se cree la base temporal.
+          SECRET_KEY: clave-solo-para-ci-no-usar-en-produccion
+          ENTORNO: desarrollo
+
+      # La aplicación se comporta distinto según haya o no un frontend
+      # compilado al lado: con `dist/index.html` presente se registra el
+      # catch-all que sirve el SPA, y ese es el código que corre en producción.
+      #
+      # CI sólo probaba el caso sin compilar, así que ocho tests de seguridad
+      # daban verde en verde sobre una configuración que en ningún comercio
+      # existe: el catch-all había dejado a toda la API sin sus 404 y nadie se
+      # enteró. Alcanza con un index de mentira para activar ese camino.
+      - name: Simular un frontend compilado
+        run: |
+          mkdir -p ../frontend/dist
+          echo '<!doctype html><title>index de prueba</title>' > ../frontend/dist/index.html
+
+      - name: Tests (con frontend compilado, que es como corre en producción)
+        run: pytest -q
+        env:
           SECRET_KEY: clave-solo-para-ci-no-usar-en-produccion
           ENTORNO: desarrollo
 

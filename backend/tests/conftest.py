@@ -17,6 +17,13 @@ os.environ["SECRET_KEY"] = "clave-solo-para-tests-no-usar-en-produccion"
 os.environ["ENTORNO"] = "desarrollo"
 os.environ["MERCADOPAGO_ACCESS_TOKEN"] = ""
 
+# El freno general de peticiones va apagado para el grueso de la suite. Cuenta
+# por IP y en memoria, y en los tests todas las peticiones vienen de la misma
+# ("testclient"), así que la corrida entera se sumaba en un solo contador y los
+# tests del final morían con 429 sin tener nada que ver. Los tests del propio
+# freno lo encienden a mano; ver `test_seguridad_avanzada.TestFrenoDePeticiones`.
+os.environ["LIMITE_PETICIONES_POR_MINUTO"] = "0"
+
 from fastapi.testclient import TestClient  # noqa: E402
 
 from app import auth, models  # noqa: E402
