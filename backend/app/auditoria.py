@@ -16,7 +16,9 @@ from app import models
 
 # Qué campos se vigilan de cada entidad. Lo que no está acá no se registra.
 CAMPOS_VIGILADOS = {
-    "producto": ("precio_venta", "costo"),
+    # `activo` es la baja y el alta de un producto: saca o devuelve mercadería
+    # al catálogo del POS, así que es un cambio que hay que poder rastrear.
+    "producto": ("precio_venta", "costo", "activo"),
     "descuento": ("nombre", "tipo", "valor", "activo", "codigo_promocional",
                   "producto_id", "fecha_inicio", "fecha_fin"),
     "usuario": ("rol_id", "estado", "pin_acceso"),

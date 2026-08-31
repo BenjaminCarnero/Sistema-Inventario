@@ -9,6 +9,12 @@ pyjwt==2.13.0
 python-multipart==0.0.30
 mercadopago==3.2.0
 
+# Base de zonas horarias IANA. En Linux `zoneinfo` la toma del sistema, pero
+# Windows no la trae, y ahí `ZoneInfo("America/Argentina/Buenos_Aires")` falla.
+# Sin esto, ZONA_HORARIA quedaba en silencio sin efecto justo en el sistema
+# operativo donde corre casi toda instalación de comercio.
+tzdata==2026.3
+
 # Driver de SQL Server. Sólo hace falta si DATABASE_URL apunta a mssql;
 # con SQLite (el modo por defecto) se puede omitir.
 # pyodbc==5.1.0

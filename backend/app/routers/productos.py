@@ -67,8 +67,13 @@ def catalogo_completo(
     Antes el POS usaba `GET /productos/`, que devuelve 100 por defecto. Un
     comercio con más de 100 productos tenía el resto del catálogo invisible en
     la caja, sin ningún aviso.
+
+    Lo dado de baja no viaja: ocuparía lugar en el equipo del cajero y
+    aparecería al escanear un producto que el comercio ya no vende.
     """
-    return db.query(models.Producto).order_by(models.Producto.id).all()
+    return db.query(models.Producto).filter(
+        models.Producto.activo == True  # noqa: E712
+    ).order_by(models.Producto.id).all()
 
 
 @router.get("/", response_model=List[schemas.Producto])
@@ -77,10 +82,16 @@ def read_productos(
     # Con un tope implícito de 100, el backoffice mostraba el catálogo cortado
     # y parecía que faltaban productos.
     limit: int = Query(500, ge=1, le=5000),
+    incluir_inactivos: bool = Query(
+        False, description="Incluye los productos dados de baja"
+    ),
     db: Session = Depends(database.get_db),
     current_user: models.Usuario = Depends(dependencies.get_current_active_user),
 ):
-    productos = db.query(models.Producto).offset(skip).limit(limit).all()
+    query = db.query(models.Producto)
+    if not incluir_inactivos:
+        query = query.filter(models.Producto.activo == True)  # noqa: E712
+    productos = query.offset(skip).limit(limit).all()
 
     # El cajero necesita el catálogo para vender, no el margen del negocio. El
     # POS ya descartaba el costo antes de guardarlo en el equipo; entregarlo
@@ -163,3 +174,39 @@ def update_producto(
     db.commit()
     db.refresh(db_producto)
     return db_producto
+
+
+@router.delete("/{producto_id}", status_code=status.HTTP_204_NO_CONTENT)
+def dar_de_baja_producto(
+    producto_id: int,
+    db: Session = Depends(database.get_db),
+    current_user: models.Usuario = Depends(
+        dependencies.require_role([models.RolEnum.ADMIN.value, models.RolEnum.ENCARGADO.value])
+    ),
+):
+    """Saca un producto de circulación sin borrarlo.
+
+    Baja lógica y no borrado, por lo mismo que con los usuarios: las ventas
+    pasadas, los movimientos de stock y los pedidos lo siguen referenciando, y
+    borrarlo dejaría el historial con líneas que apuntan a la nada.
+
+    Hasta ahora no había forma de hacer esto: el catálogo sólo podía crecer, y
+    un producto discontinuado seguía apareciéndole al cajero para siempre.
+    Para volver a ponerlo en venta se edita con `activo: true`.
+    """
+    db_producto = db.query(models.Producto).filter(models.Producto.id == producto_id).first()
+    if not db_producto:
+        raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+    if not db_producto.activo:
+        raise HTTPException(status_code=400, detail="El producto ya está dado de baja")
+
+    auditoria.registrar(
+        db, current_user, "producto", "ELIMINAR",
+        entidad_id=db_producto.id, entidad_nombre=db_producto.nombre,
+        campo="activo", valor_anterior=True, valor_nuevo=False,
+    )
+
+    db_producto.activo = False
+    db.commit()
+    return

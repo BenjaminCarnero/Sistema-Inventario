@@ -253,12 +253,19 @@ def crear_devolucion(
                 subtotal=subtotal,
             ))
 
-            # La mercadería vuelve al depósito
-            producto = db.query(models.Producto).filter(
+            # La mercadería vuelve al depósito. La suma la hace la base y no
+            # Python: acá había un `with_for_update()` seguido de un
+            # `stock_actual += cantidad`, y SQLite descarta el FOR UPDATE en
+            # silencio —compila a un SELECT pelado—, así que el UPDATE salía
+            # con el valor absoluto que se había leído. Dos devoluciones
+            # simultáneas del mismo producto, o una devolución mientras entra
+            # un pedido, y una de las dos se perdía sin ningún error.
+            db.query(models.Producto).filter(
                 models.Producto.id == producto_id
-            ).with_for_update().first()
-            if producto:
-                producto.stock_actual += cantidad
+            ).update(
+                {models.Producto.stock_actual: models.Producto.stock_actual + cantidad},
+                synchronize_session=False,
+            )
 
             db.add(models.MovimientoStock(
                 producto_id=producto_id,

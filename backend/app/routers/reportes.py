@@ -6,7 +6,7 @@ from typing import List, Optional
 from app import models, schemas, database, dependencies
 # Los helpers de fecha viven en `app/fechas.py`: estaban acá y por eso el
 # arreglo de zona horaria no había llegado a stock ni a auditoría.
-from app.fechas import rango_local_en_utc, dia_local_en_utc, fecha_local_de  # noqa: F401
+from app.fechas import rango_local_en_utc, dia_local_en_utc, fecha_local_de, hoy_local  # noqa: F401
 
 router = APIRouter(prefix="/reportes", tags=["reportes"])
 
@@ -271,7 +271,7 @@ def get_ventas_por_dia(
 ):
     """Serie temporal de recaudación diaria para el gráfico del dashboard.
     Devuelve todos los días del rango, incluidos los que no tuvieron ventas."""
-    hoy = date.today()
+    hoy = hoy_local()
     inicio = hoy - timedelta(days=dias - 1)
 
     desde_utc, hasta_utc = rango_local_en_utc(inicio, hoy)

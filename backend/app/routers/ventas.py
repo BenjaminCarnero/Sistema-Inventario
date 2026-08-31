@@ -1,10 +1,10 @@
 import logging
 from typing import List
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
-from app import models, schemas, database, dependencies
+from app import models, schemas, database, dependencies, auditoria
 from app.routers.configuracion import obtener_config
 from app.routers import pagos
 
@@ -18,6 +18,48 @@ MAX_LINEAS = 200
 MAX_CANTIDAD_POR_LINEA = 10_000
 
 METODOS_VALIDOS = {m.value for m in models.MetodoPagoEnum} | {"MERCADOPAGO"}
+
+# Hasta cuántos días atrás se acepta la hora que declara el POS. Una venta
+# offline puede tardar en sincronizar —un fin de semana largo sin internet es
+# normal— pero un mes no: pasado el tope se toma la hora del servidor, porque
+# lo más probable es que el reloj del equipo esté mal y no que la venta sea
+# realmente de hace un mes. Fechar mal una venta ensucia un arqueo cerrado.
+MAX_DIAS_DE_ATRASO = 30
+
+# Cuánto puede diferir el total del ticket del que calcula el servidor antes de
+# que valga la pena registrarlo. Un centavo es redondeo; más que eso es que el
+# precio o la alícuota cambiaron mientras el equipo estaba sin señal.
+TOLERANCIA_DIVERGENCIA = 0.01
+
+
+def _fecha_de_la_venta(declarada, logger_) -> datetime | None:
+    """Con qué hora se registra la venta.
+
+    Devuelve None para que mande el valor por defecto (la hora del servidor)
+    cuando el POS no declaró nada o cuando lo que declaró no es creíble.
+    """
+    if declarada is None:
+        return None
+
+    # La base guarda UTC sin tzinfo. Lo que llega del navegador viene en UTC
+    # con zona; lo que llegue sin zona se toma como UTC y no como hora local,
+    # que es el mismo criterio del resto del sistema.
+    if declarada.tzinfo is not None:
+        declarada = declarada.astimezone(timezone.utc).replace(tzinfo=None)
+
+    ahora = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    # Hacia adelante no se acepta nada: una venta no puede ser del futuro, y si
+    # el reloj del equipo está adelantado aparecería en el arqueo de mañana.
+    if declarada > ahora:
+        logger_.warning("Venta con fecha futura (%s): se usa la del servidor", declarada)
+        return None
+
+    if (ahora - declarada) > timedelta(days=MAX_DIAS_DE_ATRASO):
+        logger_.warning("Venta con fecha muy vieja (%s): se usa la del servidor", declarada)
+        return None
+
+    return declarada
 
 
 def _confirmar_cobro_por_qr(db: Session, referencia: str, total: float, venta_id: int) -> str:
@@ -121,7 +163,13 @@ def create_venta(
             if not descuento.activo:
                 raise HTTPException(status_code=400, detail="El descuento no está activo")
 
-            ahora = datetime.now()
+            # En UTC, igual que las columnas contra las que se compara. Con
+            # `datetime.now()` se usaba la hora local del servidor: un
+            # descuento "hasta hoy" se vencía tres horas antes o después de lo
+            # que decía la pantalla. Es el mismo bug que `fechas.py` ya había
+            # resuelto en los reportes y en la auditoría, y que acá había
+            # quedado.
+            ahora = datetime.now(timezone.utc).replace(tzinfo=None)
             if descuento.fecha_inicio and ahora < descuento.fecha_inicio:
                 raise HTTPException(status_code=400, detail="El descuento todavía no está vigente")
             if descuento.fecha_fin and ahora > descuento.fecha_fin:
@@ -147,8 +195,16 @@ def create_venta(
             descuento_id=venta.descuento_id,
             uuid_cliente=venta.uuid_cliente,
             estado_sincronizacion=venta.estado_sincronizacion,
+            total_cobrado=venta.total_cobrado,
             total=0,  # Se calculará ahora
         )
+
+        # La hora que declara el POS, si es creíble. Una venta cobrada sin
+        # señal el viernes a las 20:00 tiene que quedar registrada el viernes a
+        # las 20:00, no el lunes cuando volvió el internet.
+        fecha_declarada = _fecha_de_la_venta(venta.fecha_hora_local, logger)
+        if fecha_declarada is not None:
+            db_venta.fecha_hora = fecha_declarada
         # La referencia del QR se asigna recién después de confirmar el cobro,
         # más abajo: hasta entonces la venta no está pagada.
         db.add(db_venta)
@@ -251,6 +307,31 @@ def create_venta(
             db_venta.iva_monto = round(iva_monto, 2)
 
         db_venta.total = round(total_venta, 2)
+
+        # El total del ticket contra el que acaba de calcular el servidor.
+        #
+        # Manda el del servidor: esa regla no se negocia, es lo que impide que
+        # alguien se cobre un producto de $2000 a $1. Pero cuando la venta se
+        # cobró sin señal, el POS usó el catálogo y la alícuota que tenía
+        # guardados, y si algo de eso cambió mientras tanto el cliente se llevó
+        # un ticket por un importe y el sistema guarda otro. Antes esa
+        # diferencia existía igual: lo que no existía era forma de enterarse.
+        if venta.total_cobrado is not None:
+            diferencia = round(db_venta.total - venta.total_cobrado, 2)
+            if abs(diferencia) > TOLERANCIA_DIVERGENCIA:
+                logger.warning(
+                    "Venta %s: el ticket decía %.2f y el servidor calculó %.2f (%+.2f)",
+                    db_venta.uuid_cliente or db_venta.id,
+                    venta.total_cobrado, db_venta.total, diferencia,
+                )
+                auditoria.registrar(
+                    db, current_user, "venta", "MODIFICAR",
+                    entidad_id=db_venta.id,
+                    entidad_nombre=f"Venta #{db_venta.id}",
+                    campo="total",
+                    valor_anterior=f"{venta.total_cobrado:.2f} (ticket)",
+                    valor_nuevo=f"{db_venta.total:.2f} (recalculado al sincronizar)",
+                )
 
         # El cobro por QR se confirma contra Mercado Pago con el total recién
         # calculado. Si no está acreditado, la excepción hace rollback y el

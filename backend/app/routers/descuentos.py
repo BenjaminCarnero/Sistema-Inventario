@@ -1,5 +1,5 @@
 from typing import List
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app import models, schemas, database, dependencies, auditoria
@@ -36,7 +36,9 @@ def read_descuentos(
     (activos y dentro de su ventana de fechas), que es lo que consume el POS."""
     query = db.query(models.Descuento)
     if solo_vigentes:
-        ahora = datetime.now()
+        # En UTC, igual que las columnas contra las que se compara: con la
+        # hora local del servidor un descuento se vencía a la hora equivocada.
+        ahora = datetime.now(timezone.utc).replace(tzinfo=None)
         query = query.filter(models.Descuento.activo == True)  # noqa: E712
         return [
             d for d in query.all()

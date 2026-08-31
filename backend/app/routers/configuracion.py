@@ -209,7 +209,26 @@ def restaurar_defaults(
     db: Session = Depends(database.get_db),
     current_user: models.Usuario = Depends(solo_admin),
 ):
-    """Borra las personalizaciones y vuelve a los valores de fábrica."""
+    """Borra las personalizaciones y vuelve a los valores de fábrica.
+
+    Deja auditoría de cada parámetro que cambia. Antes borraba la tabla entera
+    en silencio: se podía volver el IVA y el tope de devolución a los valores de
+    fábrica sin que quedara rastro de que alguien lo hizo, justo los dos
+    parámetros que mueven plata.
+    """
+    guardados = db.query(models.Configuracion).all()
+
+    for fila in guardados:
+        de_fabrica = DEFAULTS.get(fila.clave, {}).get("valor")
+        if de_fabrica is None or fila.valor == de_fabrica:
+            continue  # no cambió nada: no ensucia el registro
+        auditoria.registrar(
+            db, current_user, "configuracion", "MODIFICAR",
+            entidad_nombre=fila.clave, campo=fila.clave,
+            valor_anterior=_resumir(fila.valor),
+            valor_nuevo=f"{_resumir(de_fabrica)} (restaurado de fábrica)",
+        )
+
     db.query(models.Configuracion).delete()
     db.commit()
     return leer_configuracion(db=db, current_user=current_user)

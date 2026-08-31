@@ -251,11 +251,18 @@ def recibir_pedido(
             if recibida <= 0:
                 continue  # no vino nada de este producto
 
-            producto = db.query(models.Producto).filter(
+            # La suma la hace la base y no Python. Acá había un
+            # `with_for_update()` que SQLite descarta en silencio, así que el
+            # UPDATE viajaba con el valor absoluto leído un instante antes:
+            # recibir dos pedidos a la vez, o recibir uno mientras se registra
+            # una devolución del mismo producto, perdía una de las dos
+            # entradas de mercadería sin dejar ningún error.
+            db.query(models.Producto).filter(
                 models.Producto.id == detalle.producto_id
-            ).with_for_update().first()
-            if producto:
-                producto.stock_actual = (producto.stock_actual or 0) + recibida
+            ).update(
+                {models.Producto.stock_actual: models.Producto.stock_actual + recibida},
+                synchronize_session=False,
+            )
 
             db.add(models.MovimientoStock(
                 producto_id=detalle.producto_id,
