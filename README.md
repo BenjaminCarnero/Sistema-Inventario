@@ -240,8 +240,21 @@ El foco vuelve solo al campo de código, así el lector siempre funciona.
 Si se cae internet o el servidor, el POS lo detecta y avisa. Se puede seguir
 vendiendo: las ventas se guardan en el equipo y el encabezado muestra cuántas
 faltan enviar. Al volver la conexión se sincronizan solas, sin duplicarse.
+Cada venta viaja con la hora en que se cobró de verdad, así una tarde sin
+internet no le mueve las ventas al día siguiente ni descuadra dos arqueos.
+
+**También se puede entrar sin conexión.** Quien ya haya iniciado sesión alguna
+vez en ese equipo puede volver a entrar con su mismo PIN aunque no haya
+servidor: el acceso se valida contra el propio equipo. Sirve para vender y no
+para el panel de administración, y vale hasta 30 días desde la última vez que
+el equipo habló con el servidor. Un dispositivo nuevo, o alguien que nunca
+entró ahí, sí necesita señal la primera vez.
 
 Mercado Pago no aparece mientras no haya conexión, porque necesita el servidor.
+
+Si un precio cambió mientras el equipo estaba sin señal, el ticket que se le dio
+al cliente puede no coincidir con lo que queda registrado: manda el precio del
+servidor, y la diferencia aparece en **Configuración → Registro de cambios**.
 
 **Un corte de luz es otra cosa**: ahí se apaga el equipo. Conviene una UPS para
 la PC y el router, o trabajar desde una tablet con datos móviles.
@@ -324,7 +337,13 @@ SECRET_KEY=<una clave larga y propia>
 CORS_ORIGINS=["https://tu-dominio.com"]
 FRONTEND_URL=https://tu-dominio.com
 RESPALDO_EXTERNO=C:\Users\vos\OneDrive\respaldos-pos
+PROXIES_CONFIABLES=1        # si hay un nginx / Caddy adelante
 ```
+
+> **`PROXIES_CONFIABLES` no es opcional si vas a poner un reverse proxy.** Con
+> 0, todas las peticiones llegan con la IP del proxy: el freno contra el barrido
+> de cuentas bloquearía a todo el local de una y el freno por cuenta dejaría de
+> distinguir a nadie. Poné la cantidad de proxies propios que hay delante.
 
 Con `ENTORNO=produccion` el arranque **falla** si falta la `SECRET_KEY`, si
 `CORS_ORIGINS` está en `"*"` o si `FRONTEND_URL` quedó apuntando a localhost;
