@@ -38,9 +38,16 @@ vi.mock('../api', () => ({
   }),
 }));
 
-/** Token con el payload que lee `getUsername()`; la firma no se valida acá. */
-function tokenDe(usuario: string, rol: number) {
-  const payload = btoa(JSON.stringify({ sub: usuario, rol }));
+/**
+ * Token con el payload que leen `getUserId()` y `getUsername()`; la firma no
+ * se valida acá.
+ *
+ * `sub` es el id y no el nombre: identificar por nombre permitía que renombrar
+ * a un cajero y reusar el nombre viejo convirtiera su sesión en una de
+ * administrador. El nombre viaja aparte y sólo para mostrarlo.
+ */
+function tokenDe(id: number, nombre: string, rol: number) {
+  const payload = btoa(JSON.stringify({ sub: String(id), nombre, rol, cv: 1 }));
   return `cabecera.${payload}.firma`;
 }
 
@@ -61,7 +68,7 @@ async function montarPanelDeUsuarios(usuario: ReturnType<typeof userEvent.setup>
 
 beforeEach(() => {
   localStorage.clear();
-  localStorage.setItem('token', tokenDe('jefe', 1));
+  localStorage.setItem('token', tokenDe(1, 'jefe', 1));
   cambiarMiPin.mockClear();
   reiniciarPinUsuario.mockClear();
 });

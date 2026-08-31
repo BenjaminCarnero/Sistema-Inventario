@@ -12,6 +12,8 @@ import { Skeleton, EmptyState } from './components/Skeleton';
 import { TopProductosChart } from './components/TopProductosChart';
 import { ProductImage } from './components/ProductImage';
 import { ConfiguracionPanel } from './components/ConfiguracionPanel';
+import { AuditoriaPanel } from './components/AuditoriaPanel';
+import { RespaldosPanel } from './components/RespaldosPanel';
 import { useConfig } from './components/ConfigProvider';
 import { useCameraAvailability } from './useCamera';
 import { sincronizarCatalogo, paraCatalogoLocal } from './catalogoLocal';
@@ -63,8 +65,25 @@ function getUsername() {
   if (!token) return null;
   try {
     const payload = JSON.parse(atob(token.split('.')[1]));
-    return payload.sub;
-  } catch (e) {
+    // `nombre` y no `sub`: el `sub` es el id del usuario. Identificar por
+    // nombre permitía que renombrar a alguien y reusar el nombre convirtiera
+    // una sesión de cajero en una de administrador, así que el token pasó a
+    // llevar el id. El nombre viaja aparte, sólo para mostrarlo.
+    return payload.nombre ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Id del usuario de la sesión. Es lo que identifica de verdad. */
+function getUserId(): number | null {
+  const token = localStorage.getItem('token');
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const id = Number(payload.sub);
+    return Number.isFinite(id) ? id : null;
+  } catch {
     return null;
   }
 }
@@ -192,7 +211,7 @@ function Admin() {
   const [procesandoDevolucion, setProcesandoDevolucion] = useState(false);
 
   // Sub-pestaña dentro de Configuración
-  const [subTabConfig, setSubTabConfig] = useState<'sistema' | 'usuarios'>('sistema');
+  const [subTabConfig, setSubTabConfig] = useState<'sistema' | 'usuarios' | 'auditoria' | 'respaldos'>('sistema');
 
   const playBeep = () => {
     try {
@@ -2921,6 +2940,8 @@ function Admin() {
               {([
                 { id: 'sistema', label: 'Parámetros del sistema' },
                 { id: 'usuarios', label: 'Usuarios' },
+                { id: 'auditoria', label: 'Registro de cambios' },
+                { id: 'respaldos', label: 'Copias de seguridad' },
               ] as const).map(t => (
                 <button
                   key={t.id}
@@ -2937,6 +2958,8 @@ function Admin() {
             </div>
 
             {subTabConfig === 'sistema' && <ConfiguracionPanel />}
+            {subTabConfig === 'auditoria' && <AuditoriaPanel />}
+            {subTabConfig === 'respaldos' && <RespaldosPanel />}
 
             {subTabConfig === 'usuarios' && (
             <>
@@ -3066,7 +3089,7 @@ function Admin() {
                               <span className="text-status-success text-xs font-bold bg-status-success/20 px-2 py-1 rounded-full">Activo</span>
                             </td>
                             <td className="py-3 text-right">
-                              {u.nombre !== getUsername() && (
+                              {u.id !== getUserId() && (
                                 <>
                                   <button onClick={() => handleToggleRolUser(u)} className="text-brand-light hover:underline text-xs mr-4">
                                     Cambiar Rol
@@ -3097,7 +3120,7 @@ function Admin() {
                         <span className="bg-white/10 px-2 py-1 rounded text-xs">
                           {u.rol_id === 1 ? 'Administrador' : (u.rol_id === 2 ? 'Encargado' : 'Cajero')}
                         </span>
-                        {u.nombre !== getUsername() && (
+                        {u.id !== getUserId() && (
                           <div className="flex gap-4 mt-3 pt-3 border-t border-white/5">
                             <button onClick={() => handleToggleRolUser(u)} className="text-brand-light hover:underline text-xs">
                               Cambiar Rol

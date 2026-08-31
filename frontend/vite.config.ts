@@ -62,6 +62,12 @@ export default defineConfig({
       '/devoluciones': 'http://127.0.0.1:8001',
       '/proveedores': 'http://127.0.0.1:8001',
       '/pedidos': 'http://127.0.0.1:8001',
+      // Estos dos faltaban: los routers existían en el backend desde hacía
+      // rato, así que la primera pantalla que los usara habría fallado en
+      // desarrollo con un error confuso —el servidor de Vite contestando el
+      // index en vez de la API— y andado bien en producción.
+      '/auditoria': 'http://127.0.0.1:8001',
+      '/respaldos': 'http://127.0.0.1:8001',
       // Lo usa el POS para saber si el servidor responde de verdad
       '/health': 'http://127.0.0.1:8001',
     }

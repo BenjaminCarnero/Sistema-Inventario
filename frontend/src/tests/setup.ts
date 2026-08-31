@@ -1,6 +1,20 @@
 import '@testing-library/jest-dom/vitest';
+import { configure } from '@testing-library/react';
 // Dexie necesita un IndexedDB; jsdom no lo trae.
 import 'fake-indexeddb/auto';
+
+/**
+ * Más aire para los `waitFor`.
+ *
+ * Con el segundo que trae por defecto, dos tests del panel de PIN fallaban al
+ * azar cuando la máquina estaba cargada —montar el Admin entero con framer-motion
+ * y esperar a que resuelvan varias promesas no siempre entra en un segundo— y
+ * pasaban al correrlos solos. Un CI que falla al azar deja de mirarse a la
+ * tercera vez, que es peor que no tenerlo.
+ *
+ * No tapa nada: lo que está roto sigue fallando, sólo que ahora falla siempre.
+ */
+configure({ asyncUtilTimeout: 5000 });
 
 /**
  * Almacenamiento en memoria.
