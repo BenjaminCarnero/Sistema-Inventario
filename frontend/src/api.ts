@@ -35,12 +35,35 @@ export const api = {
     formData.append('username', username);
     formData.append('password', password);
 
-    const res = await fetch(`${API_URL}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: formData
-    });
-    if (!res.ok) throw new Error('Credenciales incorrectas');
+    let res: Response;
+    try {
+      res = await fetch(`${API_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: formData
+      });
+    } catch {
+      // No se llegó al servidor. Distinguirlo importa dos veces: el cajero veía
+      // "Credenciales incorrectas" cuando el problema era el wifi —y se ponía a
+      // probar PIN— y además es lo que habilita el acceso sin conexión, que no
+      // se puede ofrecer cuando el servidor sí contestó que el PIN está mal.
+      throw Object.assign(new Error('No se pudo llegar al servidor'), { esFalloDeRed: true });
+    }
+
+    if (res.status >= 500) {
+      throw Object.assign(new Error('El servidor no está respondiendo bien'), { esFalloDeRed: true });
+    }
+
+    if (res.status === 429) {
+      const cuerpo = await res.json().catch(() => null);
+      throw new Error(cuerpo?.detail || 'Demasiados intentos. Esperá un momento.');
+    }
+
+    if (!res.ok) {
+      const cuerpo = await res.json().catch(() => null);
+      throw new Error(cuerpo?.detail || 'Usuario o PIN incorrectos');
+    }
+
     const data = await res.json();
     localStorage.setItem('token', data.access_token);
     return data;
@@ -161,6 +184,75 @@ export const api = {
       );
     }
     return res.json();
+  },
+
+  // --- Auditoría -----------------------------------------------------------
+  // El backend tenía este router completo desde hacía rato y el frontend no lo
+  // llamaba nunca: toda la trazabilidad de cambios de precio, de descuentos y
+  // de permisos existía y no había forma de mirarla.
+
+  async getAuditoria(filtros: {
+    entidad?: string; usuario_id?: number; desde?: string; hasta?: string; limite?: number;
+  } = {}) {
+    const parametros = new URLSearchParams();
+    for (const [clave, valor] of Object.entries(filtros)) {
+      if (valor !== undefined && valor !== '' && valor !== null) parametros.set(clave, String(valor));
+    }
+    const res = await fetch(`${API_URL}/auditoria/?${parametros}`, { headers: this.headers });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'No se pudo leer el registro de auditoría');
+    return this.parseJson(res, 'Auditoría');
+  },
+
+  // --- Respaldos -----------------------------------------------------------
+
+  async getRespaldos() {
+    const res = await fetch(`${API_URL}/respaldos/`, { headers: this.headers });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'No se pudieron listar los respaldos');
+    return this.parseJson(res, 'Respaldos');
+  },
+
+  async crearRespaldo() {
+    const res = await fetch(`${API_URL}/respaldos/`, { method: 'POST', headers: this.headers });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'No se pudo crear el respaldo');
+    return this.parseJson(res, 'Respaldos');
+  },
+
+  /**
+   * Baja una copia al equipo.
+   *
+   * Va por `fetch` y no por un enlace directo porque la descarga necesita la
+   * cabecera de autorización: el endpoint es sólo para administradores, y un
+   * `<a href>` no manda el token.
+   */
+  async descargarRespaldo(nombre: string) {
+    const res = await fetch(`${API_URL}/respaldos/${encodeURIComponent(nombre)}`, {
+      headers: this.headers,
+    });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'No se pudo descargar el respaldo');
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const enlace = document.createElement('a');
+    enlace.href = url;
+    enlace.download = nombre;
+    document.body.appendChild(enlace);
+    enlace.click();
+    enlace.remove();
+    URL.revokeObjectURL(url);
+  },
+
+  // --- Productos: baja lógica ----------------------------------------------
+
+  async darDeBajaProducto(id: number) {
+    const res = await fetch(`${API_URL}/productos/${id}`, {
+      method: 'DELETE', headers: this.headers,
+    });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'No se pudo dar de baja el producto');
   },
 
   /** Extrae el detalle de error de FastAPI, con un texto de respaldo. */

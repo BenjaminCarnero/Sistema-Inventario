@@ -15,6 +15,7 @@ import { sanitizarMonto, formatearTope } from './montos';
 import { sincronizarCatalogo } from './catalogoLocal';
 import { CONFIG_ESCANER, mejorarImagen } from './escaner';
 import { recordarCaja, cajaRecordada, cajaProvisoria, esProvisoria } from './cajaLocal';
+import { recordarAcceso, validarOffline, hayCredencialesGuardadas } from './sesionLocal';
 import { Logo, LogoMark } from './components/Logo';
 import { ProductImage } from './components/ProductImage';
 
@@ -54,6 +55,10 @@ function POS() {
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('token'));
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  // Se entró validando contra el equipo porque no había servidor. Se puede
+  // vender, pero no hay token: todo lo que necesite la API queda esperando a
+  // que vuelva la conexión.
+  const [sesionOffline, setSesionOffline] = useState(false);
   
   // Caja States
   const [caja, setCaja] = useState<any>(null);
@@ -149,10 +154,22 @@ function POS() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await api.login(username, password);
+      const datos = await api.login(username, password);
+
+      // Queda guardado en el equipo para poder entrar la próxima vez aunque no
+      // haya servidor. Se renueva en cada acceso, así el hash sigue el PIN si
+      // cambió y la credencial no se vence trabajando normalmente.
+      try {
+        const payload = JSON.parse(atob(datos.access_token.split('.')[1]));
+        await recordarAcceso(username, password, payload.rol);
+      } catch {
+        /* sin acceso offline: no es motivo para no dejar entrar ahora */
+      }
+
+      setSesionOffline(false);
       setIsAuthenticated(true);
       recargarConfig();
-      
+
       // Sincronizar catálogo para que la DB local no esté vacía
       try {
         await sincronizarCatalogo(await api.getCatalogo());
@@ -162,6 +179,41 @@ function POS() {
       }
 
     } catch (err: any) {
+      // Sin servidor se valida contra el equipo. Es la única forma de que un
+      // comercio que abre con el internet caído pueda vender: la cola de
+      // ventas y el catálogo ya viven acá, lo único que faltaba era entrar.
+      //
+      // Sólo cuando el fallo es de red. Si el servidor contestó "PIN
+      // incorrecto", el PIN es incorrecto y no hay nada que reintentar acá.
+      if (err?.esFalloDeRed) {
+        const resultado = await validarOffline(username, password);
+
+        if (resultado.ok) {
+          setSesionOffline(true);
+          setIsAuthenticated(true);
+          showToast('Entraste sin conexión: podés vender, y todo se sincroniza al volver la señal', 'success');
+          return;
+        }
+
+        if (resultado.motivo === 'vencida') {
+          showToast(
+            'Hace demasiado que este equipo no se conecta. Hay que entrar una vez con señal.',
+            'error',
+          );
+          return;
+        }
+
+        if (resultado.motivo === 'sin_credencial') {
+          showToast(
+            hayCredencialesGuardadas()
+              ? 'Ese usuario nunca entró en este equipo. Sin conexión sólo pueden entrar los que ya lo usaron.'
+              : 'No hay servidor y este equipo todavía no tiene ninguna sesión guardada.',
+            'error',
+          );
+          return;
+        }
+      }
+
       showToast(err.message, 'error');
     }
   };
@@ -694,6 +746,15 @@ function POS() {
             vuelto: venta.vuelto,
             descuento_id: venta.descuento_id ?? null,
             estado_sincronizacion: true,
+            // Cuándo se cobró de verdad. Sin esto la venta quedaba fechada
+            // cuando se sincronizaba: un corte el viernes a la tarde movía
+            // todas esas ventas al sábado y los dos arqueos daban mal.
+            fecha_hora_local: venta.fecha_hora_local,
+            // Lo que decía el ticket. El servidor recalcula el total con su
+            // catálogo —así tiene que ser—, pero si el precio cambió mientras
+            // el equipo estaba sin señal los dos números no coinciden, y esa
+            // diferencia tiene que quedar registrada en algún lado.
+            total_cobrado: venta.total,
             detalles: venta.detalles.map(d => ({
               producto_id: d.producto_id,
               cantidad: d.cantidad,
@@ -746,10 +807,21 @@ function POS() {
   };
 
   useEffect(() => {
+    // Con sesión offline no hay token, así que no se puede sincronizar todavía:
+    // las ventas quedan en la cola —que es su lugar— hasta que alguien entre
+    // con el servidor a mano. Se avisa, porque si no el cajero ve el contador
+    // de pendientes subir con la señal ya de vuelta y no entiende por qué.
+    if (!isOffline && sesionOffline) {
+      showToast(
+        'Volvió la conexión. Cerrá sesión y entrá de nuevo para que se sincronicen las ventas.',
+        'success',
+      );
+      return;
+    }
     if (!isOffline && isAuthenticated) {
       syncVentas();
     }
-  }, [isOffline, isAuthenticated]);
+  }, [isOffline, isAuthenticated, sesionOffline]);
 
   if (!isAuthenticated) {
     return (
@@ -782,6 +854,17 @@ function POS() {
       <header className="flex justify-between items-center mb-8">
         <div className="flex items-center gap-3 min-w-0">
           <Logo size={40} />
+          {/* Se entró validando contra este equipo, sin servidor. Se puede
+              vender, pero nada llega al servidor hasta volver a entrar. */}
+          {sesionOffline && (
+            <button
+              onClick={() => { setSesionOffline(false); setIsAuthenticated(false); setPassword(''); }}
+              title="Entraste sin conexión. Tocá para volver a entrar cuando haya señal y que se sincronicen las ventas."
+              className="text-xs font-semibold px-2 py-1 rounded-full border whitespace-nowrap bg-status-warning/20 text-status-warning border-status-warning/30"
+            >
+              Sesión sin conexión
+            </button>
+          )}
           {caja && (
             <span className={`text-xs font-semibold px-2 py-1 rounded-full border whitespace-nowrap ${
               esProvisoria(caja)
