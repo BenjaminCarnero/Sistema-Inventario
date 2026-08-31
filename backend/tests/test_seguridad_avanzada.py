@@ -62,8 +62,13 @@ class TestFalsificacionDeToken:
         El rol tiene que salir de la base y no del token; si no, cualquiera que
         entienda cómo funciona un JWT se asciende solo.
         """
+        # El token va bien armado a propósito: el `sub` es el id real del
+        # cajero y la versión de credencial es la suya. Lo único mentiroso es
+        # el rol, que es justo lo que el servidor no tiene que creerle.
         mentiroso = token_crudo({
-            "sub": "cajero", "rol": models.RolEnum.ADMIN.value,
+            "sub": str(cajero.id),
+            "rol": models.RolEnum.ADMIN.value,
+            "cv": cajero.credenciales_version or 1,
             "exp": datetime.now(timezone.utc) + timedelta(hours=1),
         })
         assert client.get("/reportes/kpi", headers=cabecera(mentiroso)).status_code == 403

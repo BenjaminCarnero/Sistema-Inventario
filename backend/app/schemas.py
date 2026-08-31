@@ -9,8 +9,15 @@ class Token(BaseModel):
 
 
 class TokenData(BaseModel):
-    username: Optional[str] = None
+    """Lo que viaja dentro del token.
+
+    `usuario_id` y no el nombre: identificar por nombre permitía que renombrar
+    a alguien y reusar el nombre viejo convirtiera una sesión de cajero en una
+    de administrador. El id no se recicla nunca.
+    """
+    usuario_id: Optional[int] = None
     rol: Optional[int] = None
+    credenciales_version: Optional[int] = None
 
 
 class UsuarioBase(BaseModel):
@@ -86,20 +93,30 @@ class ProductoCreate(ProductoBase):
 
 
 class ProductoUpdate(BaseModel):
+    """Edición de un producto.
+
+    `stock_actual` NO está acá a propósito. Se podía mandar en este PUT y el
+    stock cambiaba sin generar movimiento ni entrada de auditoría, que es
+    exactamente el hueco por el que se tapa un faltante: contar mal, corregir
+    el número a mano desde la pantalla de productos, y que el historial no
+    muestre nada. El stock se mueve por `POST /stock/movimientos`, que deja
+    quién, cuándo y por qué.
+    """
     codigo_barras: Optional[str] = None
     nombre: Optional[str] = None
     precio_venta: Optional[float] = None
     costo: Optional[float] = None
-    stock_actual: Optional[int] = None
     categoria_id: Optional[int] = None
     imagen_url: Optional[str] = None
     proveedor_id: Optional[int] = None
     cantidad_pedido_habitual: Optional[int] = Field(default=None, ge=0, le=1_000_000)
+    activo: Optional[bool] = None
 
 
 class Producto(ProductoBase):
     id: int
     stock_actual: int
+    activo: bool = True
     # El costo es el margen del negocio. Viaja vacío para el cajero, que no
     # tiene por qué conocerlo: el catálogo del POS ya lo descartaba al
     # guardarlo en el equipo, pero la API lo entregaba igual.
@@ -190,10 +207,22 @@ class VentaBase(BaseModel):
     pago_referencia: Optional[str] = Field(default=None, max_length=64)
     estado: str = "COMPLETADA"
     estado_sincronizacion: bool = True
+    # Lo que decía el ticket que se le dio al cliente. El servidor igual
+    # recalcula el total con su catálogo —esa regla no se toca—, pero guardar
+    # los dos permite detectar que no coinciden.
+    total_cobrado: Optional[float] = Field(default=None, ge=0)
 
 
 class VentaCreate(VentaBase):
     detalles: List[DetalleVentaCreate]
+    # Cuándo se cobró de verdad, en el reloj del equipo. El POS ya lo guardaba
+    # en su cola offline pero no lo mandaba, así que la venta quedaba fechada
+    # cuando se sincronizó: un corte de internet el viernes a la tarde movía
+    # todas esas ventas al sábado y los dos arqueos daban mal.
+    #
+    # Sólo de entrada: en la respuesta lo que vale es `fecha_hora`, que es lo
+    # que quedó guardado.
+    fecha_hora_local: Optional[datetime] = None
 
 
 class Venta(VentaBase):

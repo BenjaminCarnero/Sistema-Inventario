@@ -20,16 +20,32 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     )
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
+        sujeto = payload.get("sub")
+        if sujeto is None:
             raise credentials_exception
-        token_data = schemas.TokenData(username=username, rol=payload.get("rol"))
-    except jwt.InvalidTokenError:
+        # El `sub` de un token viejo es el nombre del usuario, no el id. Esos
+        # tokens no se aceptan: son justamente los que abrían la puerta a la
+        # escalada por renombrado. Al desplegar esto, las sesiones abiertas se
+        # cierran una vez y hay que volver a entrar.
+        token_data = schemas.TokenData(
+            usuario_id=int(sujeto),
+            rol=payload.get("rol"),
+            credenciales_version=payload.get("cv"),
+        )
+    except (jwt.InvalidTokenError, TypeError, ValueError):
         raise credentials_exception
 
-    user = db.query(models.Usuario).filter(models.Usuario.nombre == token_data.username).first()
+    user = db.query(models.Usuario).filter(models.Usuario.id == token_data.usuario_id).first()
     if user is None:
         raise credentials_exception
+
+    # Cambiar o reiniciar el PIN incrementa la versión, así que un token
+    # emitido antes deja de servir en el acto. Sin esto, sacar de circulación
+    # un PIN visto por encima del hombro no cerraba nada: la sesión abierta
+    # seguía valiendo hasta doce horas más.
+    if (token_data.credenciales_version or 0) != (user.credenciales_version or 1):
+        raise credentials_exception
+
     return user
 
 

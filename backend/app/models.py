@@ -40,10 +40,20 @@ class Usuario(Base):
     __tablename__ = "usuarios"
 
     id = Column(Integer, primary_key=True, index=True)
-    nombre = Column(String(100), nullable=False)
+    # UNIQUE de verdad y no sólo validado en código: el token identificaba al
+    # usuario por su nombre, así que renombrar a un cajero y crear después otro
+    # usuario con el nombre viejo convertía la sesión abierta del cajero en la
+    # del usuario nuevo. Ahora el token lleva el id, pero el nombre igual tiene
+    # que ser único: es con lo que se inicia sesión.
+    nombre = Column(String(100), unique=True, index=True, nullable=False)
     pin_acceso = Column(String(255), nullable=False)  # Hash bcrypt
     rol_id = Column(Integer, default=RolEnum.CAJERO.value)
     estado = Column(Boolean, default=True)
+    # Se incrementa cada vez que cambia el PIN. El token lleva el valor que
+    # tenía al emitirse, así cambiar o reiniciar un PIN corta las sesiones
+    # abiertas al instante. Antes no: quien había visto un PIN por encima del
+    # hombro seguía adentro hasta doce horas después de que se lo cambiaran.
+    credenciales_version = Column(Integer, nullable=False, default=1, server_default="1")
 
     ventas = relationship("Venta", back_populates="cajero")
     movimientos = relationship("MovimientoStock", back_populates="encargado")
@@ -97,6 +107,11 @@ class Producto(Base):
     # Es más confiable que calcularlo con las ventas cuando todavía hay poco
     # historial, y el dueño ya sabe el número de memoria.
     cantidad_pedido_habitual = Column(Integer, nullable=True)
+    # Baja lógica, igual que la de usuarios. Un producto no se borra: sus
+    # ventas pasadas lo siguen refiriendo. Antes no había ninguna forma de
+    # sacarlo de circulación, así que el catálogo del POS sólo podía crecer y
+    # lo discontinuado seguía apareciendo para siempre.
+    activo = Column(Boolean, nullable=False, default=True, server_default="1")
 
     categoria = relationship("Categoria", back_populates="productos")
     proveedor = relationship("Proveedor", back_populates="productos")
@@ -108,9 +123,18 @@ class Venta(Base):
     __tablename__ = "ventas"
 
     id = Column(Integer, primary_key=True, index=True)
-    usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
-    fecha_hora = Column(DateTime(timezone=True), default=ahora_utc)
+    usuario_id = Column(Integer, ForeignKey("usuarios.id"), index=True, nullable=False)
+    # Indexada: el arqueo, los reportes y el panel filtran por rango de fechas
+    # en cada consulta. Sin el índice, cada una recorría la tabla entera.
+    fecha_hora = Column(DateTime(timezone=True), default=ahora_utc, index=True)
     total = Column(Float, nullable=False)
+    # Lo que decía el ticket que se le dio al cliente. En una venta offline el
+    # POS calcula el total con el catálogo y el IVA que tiene guardados, y al
+    # sincronizar el servidor lo recalcula con los suyos: si el precio o la
+    # alícuota cambiaron mientras el equipo estaba sin señal, los dos números
+    # no coinciden. Guardarlo es lo que permite darse cuenta; antes la
+    # diferencia existía igual y no quedaba registrada en ningún lado.
+    total_cobrado = Column(Float, nullable=True)
     metodo_pago = Column(String(50), default=MetodoPagoEnum.EFECTIVO.value)
     monto_recibido = Column(Float, nullable=True)
     vuelto = Column(Float, nullable=True)
@@ -132,16 +156,24 @@ class Venta(Base):
     estado_sincronizacion = Column(Boolean, default=True)
 
     cajero = relationship("Usuario", back_populates="ventas")
-    detalles = relationship("DetalleVenta", back_populates="venta", cascade="all, delete-orphan")
-    devoluciones = relationship("Devolucion", back_populates="venta", cascade="all, delete-orphan")
+    # Sin cascada de borrado a propósito. Una venta no se borra nunca: anularla
+    # deja el registro y suma una devolución que lo referencia. Con
+    # `delete-orphan` puesto, el día que alguien agregara un `DELETE /ventas`
+    # se llevaría en silencio los detalles y las devoluciones, y el historial
+    # contable quedaría con un agujero imposible de reconstruir. Así, ese
+    # borrado falla contra la clave foránea, que es lo que corresponde.
+    detalles = relationship("DetalleVenta", back_populates="venta")
+    devoluciones = relationship("Devolucion", back_populates="venta")
 
 
 class DetalleVenta(Base):
     __tablename__ = "detalle_ventas"
 
     id = Column(Integer, primary_key=True, index=True)
-    venta_id = Column(Integer, ForeignKey("ventas.id"), nullable=False)
-    producto_id = Column(Integer, ForeignKey("productos.id"), nullable=False)
+    # Indexadas: el ticket, los reportes y el cálculo de lo devolvible se
+    # buscan siempre por una de estas dos columnas.
+    venta_id = Column(Integer, ForeignKey("ventas.id"), index=True, nullable=False)
+    producto_id = Column(Integer, ForeignKey("productos.id"), index=True, nullable=False)
     cantidad = Column(Integer, nullable=False)
     precio_unitario = Column(Float, nullable=False)
     subtotal = Column(Float, nullable=False)
@@ -245,11 +277,14 @@ class MovimientoStock(Base):
     __tablename__ = "movimientos_stock"
 
     id = Column(Integer, primary_key=True, index=True)
-    producto_id = Column(Integer, ForeignKey("productos.id"), nullable=False)
+    # El historial de stock se consulta siempre filtrando por producto, por
+    # rango de fechas, o por los dos. Sin índices recorría la tabla entera, que
+    # es la que más rápido crece de todo el sistema: una fila por línea vendida.
+    producto_id = Column(Integer, ForeignKey("productos.id"), index=True, nullable=False)
     usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
     tipo_movimiento = Column(String(50), nullable=False)
     cantidad = Column(Integer, nullable=False)
-    fecha_hora = Column(DateTime(timezone=True), default=ahora_utc)
+    fecha_hora = Column(DateTime(timezone=True), default=ahora_utc, index=True)
     motivo = Column(String(255), nullable=True)
 
     producto = relationship("Producto", back_populates="movimientos")

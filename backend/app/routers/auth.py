@@ -3,7 +3,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from app import models, schemas, auth, database, dependencies, auditoria
+from app import models, schemas, auth, database, dependencies, auditoria, red
 from app.config import settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -22,7 +22,7 @@ def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(database.get_db),
 ):
-    ip = request.client.host if request.client else "desconocida"
+    ip = red.ip_del_cliente(request)
     bloqueo = auth.segundos_de_bloqueo(db, form_data.username, ip)
     if bloqueo:
         raise HTTPException(
@@ -53,8 +53,20 @@ def login_for_access_token(
 
     auth.limpiar_intentos(db, form_data.username, ip)
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    # El `sub` es el id y no el nombre: el nombre se puede reasignar a otra
+    # cuenta y eso convertía una sesión de cajero en una de administrador.
+    # `cv` es la versión de credencial, para poder revocar la sesión al
+    # cambiar el PIN.
     access_token = auth.create_access_token(
-        data={"sub": user.nombre, "rol": user.rol_id}, expires_delta=access_token_expires
+        data={
+            "sub": str(user.id),
+            "rol": user.rol_id,
+            "cv": user.credenciales_version or 1,
+            # Sólo para que la pantalla muestre quién está adentro. La
+            # identidad la da `sub`: de este campo el servidor no lee nada.
+            "nombre": user.nombre,
+        },
+        expires_delta=access_token_expires,
     )
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -194,7 +206,7 @@ def cambiar_mi_pin(
     circulación borrando la cuenta y creándola de nuevo, lo que le cambia el id
     y desengancha del historial las ventas de esa persona.
     """
-    ip = request.client.host if request.client else "desconocida"
+    ip = red.ip_del_cliente(request)
 
     # El PIN actual se pide para que un equipo dejado abierto no alcance para
     # quedarse con la cuenta. Cuenta como intento fallido, así el mismo freno
@@ -221,6 +233,10 @@ def cambiar_mi_pin(
 
     auth.limpiar_intentos(db, current_user.nombre, ip)
     current_user.pin_acceso = auth.get_password_hash(cambio.pin_nuevo)
+    # Corta todas las sesiones abiertas con el PIN viejo, incluida la que está
+    # haciendo este pedido: quien cambia su PIN porque se lo vieron necesita
+    # que el que lo vio quede afuera ya, no dentro de doce horas.
+    current_user.credenciales_version = (current_user.credenciales_version or 1) + 1
 
     # Queda el registro de que se cambió, nunca el PIN en sí
     auditoria.registrar(
@@ -252,6 +268,10 @@ def reiniciar_pin(
         )
 
     db_user.pin_acceso = auth.get_password_hash(cambio.pin_nuevo)
+    # Reiniciar el PIN de una cuenta comprometida tiene que cerrarla de verdad.
+    # Antes el administrador creía haberla cerrado y no la cerraba: el token
+    # que tuviera el atacante seguía valiendo.
+    db_user.credenciales_version = (db_user.credenciales_version or 1) + 1
 
     # Un PIN reiniciado por otro deja bloqueada a la cuenta si arrastraba
     # fallos, así que se limpian junto con el cambio.
