@@ -2,7 +2,8 @@
 
 > **Estado al 31/08/2026, después de la tanda de arreglos.** Las 6 fallas
 > bloqueantes y 10 de las 12 de severidad media están cerradas y con tests que
-> las fijan. Lo que sigue abierto está en la §0. El resto del documento se deja
+> las fijan. Lo que sigue abierto está en la §0. La **§9**, agregada el 02/09/2026, decide
+> cómo se reparte el sistema entre el local y la nube y cómo se cobra. El resto del documento se deja
 > **como se escribió durante el análisis**, en pasado: sirve de registro de qué
 > se encontró y con qué evidencia, que es lo que hace falta para no reabrirlo.
 
@@ -607,7 +608,135 @@ aria-*  0     role=  0     Escape en Admin.tsx  0
 
 ---
 
-## 9. Cierre
+## 9. Arquitectura comercial, modelo de venta y precio
+
+> **Agregado el 2 de septiembre de 2026.** Las secciones 1 a 8 responden *qué le falta al sistema*.
+> Esta responde las dos decisiones que hay que tomar **antes** de escribir una línea más: cómo se
+> reparte el sistema entre el local y la nube, y cómo se cobra. Están juntas porque la segunda
+> depende de la primera.
+
+### 9.1 Multi-sucursal no es multi-tenant
+
+Son dos cosas distintas que se confunden todo el tiempo:
+
+- **Multi-sucursal** — un dueño con tres locales quiere ver los tres. Es una *necesidad del cliente*
+  y es vendible.
+- **Multi-tenant** — vos hospedás doscientos comercios ajenos en una misma base. Es un *modelo de
+  negocio tuyo*, y es una decisión de arquitectura irreversible.
+
+Se puede dar la primera sin comprar la segunda. Es exactamente lo que se recomienda acá.
+
+### 9.2 Por qué multi-tenant puro está mal para este producto
+
+**Razón de producto, que es la que importa.** Todo el sistema está construido sobre una promesa:
+*se vende sin red*. SQLite en el local, cola de ventas en IndexedDB, idempotencia por `uuid_cliente`,
+login offline con PBKDF2 contra un hash guardado en el equipo, `fecha_hora_local` viajando con la
+venta. Si la fuente de verdad se muda a la nube, el POS pasa a depender de la conexión y el producto
+deja de distinguirse de cualquier SaaS que ya está en el mercado desde hace años.
+
+**Razón técnica, medida sobre este repositorio el 02/09/2026:**
+
+| Qué | Cuánto |
+|---|---|
+| Tablas en `models.py` | 16 |
+| Tablas con `comercio_id` / `tenant_id` / `sucursal_id` | **0** |
+| Llamadas a `db.query(...)` que habría que filtrar por tenant | **111** |
+| Endpoints que habría que auditar uno por uno | **59** |
+| Motor actual | SQLite. El `.env.example` contempla SQL Server; Postgres nunca se probó |
+
+Eso es entre 6 y 10 semanas. Pero el problema no es el plazo: **una sola consulta sin filtrar le
+muestra las ventas de un comercio a otro.** Eso no es un bug que se parchea el lunes, es el fin del
+producto y probablemente un problema legal.
+
+### 9.3 Las tres opciones, con su costo real
+
+| | Qué es | Costo | Riesgo |
+|---|---|---|---|
+| **A · Todo en el local** | Lo que ya es hoy: una instalación por comercio, licencia por local | 0 semanas | Sin ingreso recurrente, soporte a mano, sin panel para el dueño |
+| **B · Multi-tenant puro** | Una nube, una base, todos los comercios | 6 a 10 semanas + Postgres | Fuga de datos entre comercios; **rompe el offline** |
+| **C · Híbrido (recomendado)** | El local manda; la nube solo licencia, respalda y consolida | ~2 semanas | Bajo: el POS no cambia |
+
+### 9.4 La decisión: híbrido
+
+**El local sigue siendo dueño de su base.** La nube hace únicamente las tres cosas que no necesitan
+estar en el mostrador:
+
+1. **Activación y licencia** — saber cuántas instalaciones hay y poder darlas de baja. Hoy no hay
+   `LICENSE` ni forma de contar instalaciones (§6.1).
+2. **Respaldo externo automático** — hoy depende de que el dueño configure `RESPALDO_EXTERNO` en el
+   `.env` apuntando a una carpeta de OneDrive. Nadie lo va a hacer.
+3. **Panel consolidado de solo lectura** — cada local empuja ventas y stock a una base central *que
+   sí tiene `comercio_id`*, y el dueño mira sus tres sucursales desde el celular.
+
+**La clave del diseño: `comercio_id` vive únicamente en la base de reportes, nunca en la operativa.**
+El POS ni siquiera conoce el concepto, así que no existe la consulta mal filtrada que fuga datos. El
+envío es push unidireccional y aprovecha lo que ya está hecho: la venta ya tiene `uuid_cliente`
+idempotente y `fecha_hora_local`, que es justo lo que hace falta para reenviar sin duplicar.
+
+Si algún día un cliente grande justifica SaaS puro, se hace con la plata de ese cliente. No antes.
+
+### 9.5 Modelo de venta
+
+**Suscripción mensual por local, con activación online y período de gracia.** No licencia perpetua:
+deja sin ingreso recurrente justo cuando el soporte es eterno.
+
+**La regla que no se negocia: el chequeo de licencia falla abierto.** Si el servidor de licencias no
+responde, el POS vende igual y reintenta durante 7 a 14 días. Un sistema que deja al comercio sin
+cobrar porque se cayó un VPS es una demanda, no un bug — y contradice la misma promesa que el resto
+del sistema cumple.
+
+**Canal: revendedores.** El cuello de botella no es programar, es instalar y sostener veinte locales
+una sola persona. Un técnico de PC que instala en su ciudad, cobra el setup y paga la licencia
+resuelve el problema de escala sin costo de ingeniería. Además el white-label ya está medio hecho sin
+haberlo planeado: `configuracion_defaults.py` tiene `marca_logo_url`, `marca_color_primario` y
+`marca_color_acento`.
+
+### 9.6 Qué cobra el mercado (relevado el 02/09/2026)
+
+| Producto | Precio | Nota |
+|---|---|---|
+| Fudo Inicial | $22.500/mes por local | Sin control de inventario |
+| Fudo Avanzado | $43.900/mes por local | Con inventario y reportes |
+| Fudo Pro | $69.500/mes por local | Múltiples cajas y turnos |
+| Dux Software | desde $31.500 + IVA/mes | Usuario adicional $3.700 + IVA |
+| Commercy | desde USD 14/mes · USD 29 con ARCA | En la nube |
+| Alegra Básico / PyME | ~$2.599 / ~$5.999/mes | Solo facturación |
+| Xubio PyME · Tango Factura · Colppy | ~$3.500 / ~$4.000 / ~$5.000/mes | Solo facturación |
+
+Fuentes: lista de precios de Fudo (jun-2026), páginas de precios de Dux y Commercy, y relevamientos
+de terceros para los de facturación. Los de facturación pura sirven de piso: muestran que **el
+módulo fiscal solo, comprado aparte, cuesta una fracción de un POS completo** — o sea que salir sin
+él no destruye el precio, pero sí obliga a decirlo.
+
+> **Cuidado con estos números.** Están en pesos y en la Argentina se desactualizan en meses. Sirven
+> como relación entre productos, no como valor absoluto. Cualquier contrato necesita cláusula de
+> ajuste, y conviene razonar el precio propio en dólares o como porcentaje del competidor.
+
+### 9.7 Posicionamiento propuesto
+
+Hoy el sistema hace lo de un Fudo Avanzado/Pro en inventario, arqueo por turno, múltiples cajas,
+auditoría y cobro por QR; **le falta lo fiscal, la impresora térmica y el instalador**, y a cambio
+tiene algo que ninguno de ellos ofrece de verdad: **vende sin internet**.
+
+- **Piloto (primeros 2 o 3 locales):** gratis, a cambio de testimonio y de poder mirar los logs todos
+  los días. No es generosidad: es la única forma barata de encontrar lo que falta.
+- **Al salir, todavía sin facturación electrónica:** aproximadamente la **mitad de Fudo Avanzado** por
+  local y por mes, más un **cargo único de instalación** equivalente a uno o dos meses. El cargo de
+  instalación no es plata: es lo que hace que el cliente valore la puesta en marcha y lo que le paga
+  el trabajo al revendedor.
+- **Con facturación electrónica resuelta:** recién ahí se puede pedir precio de Fudo Avanzado.
+- **Revendedor:** compra la licencia al 50-60% y se queda con el setup completo.
+
+### 9.8 Lo que no hay que hacer todavía
+
+Nada de esto tiene sentido antes del instalador y de la actualización remota (§6.1). **No se cobra
+una suscripción a un local al que no se le puede llevar un arreglo.** El orden sigue siendo el de la
+§7: mergear a `main`, instalador y servicio de Windows, impresora térmica, piloto sin cobrar, y
+recién después licenciamiento con activación.
+
+---
+
+## 10. Cierre
 
 Lo mejor que tiene este proyecto no es una función: es que **las decisiones difíciles ya están
 tomadas y bien tomadas**. El precio en el servidor, la idempotencia por UUID, el arqueo por turno, el
