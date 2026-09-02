@@ -65,3 +65,9 @@ backend/respaldos/
 
 # Registro de errores del backend: es de esta máquina y puede tener datos del local
 backend/logs/
+
+# --- Instalador de Windows ---------------------------------------------------
+# Binarios de terceros que arma quien empaqueta (ver installer/README.md):
+# no son código de este proyecto y son pesados para el repositorio.
+installer/vendor/
+installer/dist/

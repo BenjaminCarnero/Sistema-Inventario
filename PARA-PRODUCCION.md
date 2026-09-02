@@ -40,17 +40,30 @@ dueño de una verdulería, y no se puede repetir en veinte locales.**
 
 - [ ] 🔴 Un solo ejecutable o instalador (Inno Setup o NSIS, ambos gratis) que deje: Python
       embebido o venv armado, la base migrada, el `.env` generado y el frontend ya compilado.
+      **Borrador escrito y parcialmente probado en `installer/`** (`setup.iss` + los tres scripts de
+      `installer/scripts/`): `generar-env.ps1` corrió de verdad y el `.env` que produce pasa la
+      validación estricta de `config.py`; encontró y corrigió dos bugs reales de compatibilidad con
+      Windows PowerShell 5.1 al probarlo. **Falta lo que no se puede hacer sin instalar software de
+      terceros ni tocar el sistema**: preparar `vendor/` (Python embebido + NSSM), compilar con
+      `iscc` y probar el instalador entero en una VM limpia. Ver `installer/README.md`.
 - [ ] 🔴 **Servicio de Windows** que levante la aplicación al prender la máquina y la reinicie si se
       cae (NSSM sirve). Un POS que hay que arrancar a mano se apaga el día que el dueño reinicia.
+      **Borrador en `installer/scripts/instalar-servicio.ps1`**, con el `AppDirectory` puesto a
+      propósito en `backend/` (si no, la base y los logs se crean vacíos en el lugar equivocado la
+      primera vez que arranca). Sin NSSM instalado en esta máquina, no se probó instalando un
+      servicio real — sólo se verificó que frena correctamente sin permisos de administrador.
 - [ ] 🔴 Un solo puerto y un solo proceso: FastAPI ya sirve el `dist` (`FRONTEND_DIST` en el
       `.env`, catch-all en `main.py:231`). **Esto ya está hecho** — sólo hay que usarlo en el
       instalador en vez de levantar Vite.
 - [x] 🔴 Primer arranque asistido — **crear el administrador inicial y el nombre del comercio, hecho
       y verificado en el navegador** (`GET /auth/estado-inicial` + pantalla en `App.tsx`, en vez de
-      `seed_admin.py` a mano). Sigue pendiente que el instalador pida la **zona horaria**: es
-      `ZONA_HORARIA` en el `.env`, no algo que se pueda cambiar desde una pantalla web sin reiniciar
-      el proceso.
-- [ ] 🟡 Desinstalación limpia que **no borre la base ni los respaldos**.
+      `seed_admin.py` a mano). La **zona horaria** la pide `installer/scripts/generar-env.ps1` al
+      instalar, porque es una variable de entorno del proceso y no algo que se pueda cambiar desde
+      una pantalla web sin reiniciar el servicio.
+- [ ] 🟡 Desinstalación limpia que **no borre la base ni los respaldos**. Diseñado en `setup.iss`
+      (la base, `.env`, `logs/` y `respaldos/` nunca se declaran en `[Files]`, así que el
+      desinstalador de Inno Setup no los conoce y no los borra) — sin compilar el instalador todavía
+      no hay una desinstalación real que probar.
 - [ ] 🟢 Firma de código (~USD 100-400/año). Sin esto Windows muestra el aviso de SmartScreen. Se
       puede vivir con eso al principio; a los diez clientes ya no.
 
