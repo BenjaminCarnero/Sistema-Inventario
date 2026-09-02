@@ -29,6 +29,17 @@ class TestAltaDeUsuarios:
         })
         assert r.status_code == 201
 
+    def test_estado_inicial_indica_si_falta_el_primer_alta(self, client, db):
+        """El asistente de primer arranque del frontend se guía por esto, no
+        hace falta sesión: es lo que decide si mostrarlo en vez del login."""
+        assert client.get("/auth/estado-inicial").json() == {"hay_usuarios": False}
+
+        client.post("/auth/register", json={
+            "nombre": "primero", "pin_acceso": "unaClaveLarga", "rol_id": 1, "estado": True,
+        })
+
+        assert client.get("/auth/estado-inicial").json() == {"hay_usuarios": True}
+
     def test_rechaza_pin_demasiado_corto(self, client, auth_admin):
         r = client.post("/auth/register", headers=auth_admin, json={
             "nombre": "x", "pin_acceso": "12", "rol_id": 3, "estado": True,

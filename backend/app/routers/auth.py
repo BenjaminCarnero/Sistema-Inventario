@@ -71,6 +71,18 @@ def login_for_access_token(
     return {"access_token": access_token, "token_type": "bearer"}
 
 
+@router.get("/estado-inicial")
+def estado_inicial(db: Session = Depends(database.get_db)):
+    """Si la base todavía no tiene usuarios, el frontend ofrece el asistente
+    de primer arranque en vez del formulario de acceso. No requiere sesión:
+    no revela nada que no se sepa mirando la pantalla de login (¿hay o no hay
+    con quién entrar?), y es justo lo que hace falta saber antes de poder
+    entrar con alguien.
+    """
+    hay_usuarios = db.query(models.Usuario).first() is not None
+    return {"hay_usuarios": hay_usuarios}
+
+
 @router.post("/register", response_model=schemas.Usuario, status_code=status.HTTP_201_CREATED)
 def register_user(
     user: schemas.UsuarioCreate,

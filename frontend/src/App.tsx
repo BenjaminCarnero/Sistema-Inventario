@@ -59,6 +59,14 @@ function POS() {
   // vender, pero no hay token: todo lo que necesite la API queda esperando a
   // que vuelva la conexión.
   const [sesionOffline, setSesionOffline] = useState(false);
+
+  // null mientras no se sabe todavía: no hay que mostrar el login ni el
+  // asistente hasta tener la respuesta, porque una base vacía que muestra el
+  // login por un instante invita a probar usuarios que no existen.
+  const [necesitaPrimerArranque, setNecesitaPrimerArranque] = useState<boolean | null>(null);
+  const [nombreComercioInicial, setNombreComercioInicial] = useState('');
+  const [pinConfirmado, setPinConfirmado] = useState('');
+  const [enviandoPrimerArranque, setEnviandoPrimerArranque] = useState(false);
   
   // Caja States
   const [caja, setCaja] = useState<any>(null);
@@ -215,6 +223,52 @@ function POS() {
       }
 
       showToast(err.message, 'error');
+    }
+  };
+
+  useEffect(() => {
+    // Sin esto, una base recién instalada muestra el login de siempre y el
+    // dueño del comercio no tiene forma de crear el primer administrador sin
+    // usar la consola.
+    if (isAuthenticated) return;
+    api.estadoInicial()
+      .then(({ hay_usuarios }) => setNecesitaPrimerArranque(!hay_usuarios))
+      // Sin servidor no se puede inicializar nada: se asume que ya hay
+      // usuarios y se muestra el login de siempre, que a su vez ofrece el
+      // acceso offline si corresponde.
+      .catch(() => setNecesitaPrimerArranque(false));
+  }, [isAuthenticated]);
+
+  const handlePrimerArranque = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password !== pinConfirmado) {
+      showToast('Los PIN no coinciden', 'error');
+      return;
+    }
+    setEnviandoPrimerArranque(true);
+    try {
+      await api.register(username, password, 1);
+      await api.login(username, password);
+
+      const nombre = nombreComercioInicial.trim();
+      if (nombre) {
+        try {
+          await api.updateConfiguracion({ negocio_nombre: nombre });
+        } catch {
+          // El administrador ya quedó creado y puede entrar: el nombre del
+          // comercio se cambia después desde Configuración sin perder nada.
+          showToast('El administrador se creó, pero el nombre del comercio no se pudo guardar. Cambialo desde Configuración.', 'error');
+        }
+      }
+
+      setNecesitaPrimerArranque(false);
+      setIsAuthenticated(true);
+      recargarConfig();
+      showToast('Sistema inicializado. Ya podés vender.', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'No se pudo completar el primer arranque', 'error');
+    } finally {
+      setEnviandoPrimerArranque(false);
     }
   };
 
@@ -824,6 +878,49 @@ function POS() {
   }, [isOffline, isAuthenticated, sesionOffline]);
 
   if (!isAuthenticated) {
+    // Todavía no se sabe si hay usuarios: evita mostrar el login (o el
+    // asistente) un instante antes de tener la respuesta del servidor.
+    if (necesitaPrimerArranque === null) {
+      return <div className="min-h-screen flex items-center justify-center p-4" />;
+    }
+
+    if (necesitaPrimerArranque) {
+      return (
+        <div className="min-h-screen flex items-center justify-center p-4">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-8 w-full max-w-md relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-brand to-accent"></div>
+            <div className="flex justify-center mb-2">
+              <Logo size={56} subtitle="Primer arranque" />
+            </div>
+            <p className="text-sm text-text-secondary text-center mb-6">
+              Todavía no hay ningún usuario cargado. Creá la cuenta de administrador para empezar.
+            </p>
+            <form onSubmit={handlePrimerArranque} className="flex flex-col gap-5">
+              <input
+                className="glass-input p-4 rounded-xl" type="text" placeholder="Nombre del comercio (opcional)"
+                value={nombreComercioInicial} onChange={e => setNombreComercioInicial(e.target.value)}
+              />
+              <input
+                className="glass-input p-4 rounded-xl" type="text" placeholder="Usuario administrador"
+                value={username} onChange={e => setUsername(e.target.value)} required
+              />
+              <input
+                className="glass-input p-4 rounded-xl" type="password" placeholder="PIN de acceso"
+                value={password} onChange={e => setPassword(e.target.value)} required
+              />
+              <input
+                className="glass-input p-4 rounded-xl" type="password" placeholder="Repetí el PIN"
+                value={pinConfirmado} onChange={e => setPinConfirmado(e.target.value)} required
+              />
+              <button type="submit" disabled={enviandoPrimerArranque} className="btn-primary py-4 mt-2 disabled:opacity-60">
+                {enviandoPrimerArranque ? 'Creando...' : 'Crear administrador y entrar'}
+              </button>
+            </form>
+          </motion.div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-8 w-full max-w-md relative overflow-hidden">
@@ -832,13 +929,13 @@ function POS() {
             <Logo size={56} subtitle="Acceso a Caja" />
           </div>
           <form onSubmit={handleLogin} className="flex flex-col gap-5">
-            <input 
-              className="glass-input p-4 rounded-xl" type="text" placeholder="Usuario" 
-              value={username} onChange={e => setUsername(e.target.value)} required 
+            <input
+              className="glass-input p-4 rounded-xl" type="text" placeholder="Usuario"
+              value={username} onChange={e => setUsername(e.target.value)} required
             />
-            <input 
-              className="glass-input p-4 rounded-xl" type="password" placeholder="PIN de Acceso" 
-              value={password} onChange={e => setPassword(e.target.value)} required 
+            <input
+              className="glass-input p-4 rounded-xl" type="password" placeholder="PIN de Acceso"
+              value={password} onChange={e => setPassword(e.target.value)} required
             />
             <button type="submit" className="btn-primary py-4 mt-2">
               Ingresar al POS

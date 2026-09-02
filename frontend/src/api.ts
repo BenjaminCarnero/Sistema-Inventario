@@ -20,6 +20,12 @@ function detalleLegible(detail: unknown, porDefecto = 'Error sincronizando venta
 }
 
 export const api = {
+  async estadoInicial(): Promise<{ hay_usuarios: boolean }> {
+    const res = await fetch(`${API_URL}/auth/estado-inicial`);
+    if (!res.ok) throw new Error('Error al consultar el estado del sistema');
+    return res.json();
+  },
+
   async register(nombre: string, pin_acceso: string, rol_id: number = 1) {
     const res = await fetch(`${API_URL}/auth/register`, {
       method: 'POST',
