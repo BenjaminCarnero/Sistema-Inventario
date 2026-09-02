@@ -45,8 +45,11 @@ dueño de una verdulería, y no se puede repetir en veinte locales.**
 - [ ] 🔴 Un solo puerto y un solo proceso: FastAPI ya sirve el `dist` (`FRONTEND_DIST` en el
       `.env`, catch-all en `main.py:231`). **Esto ya está hecho** — sólo hay que usarlo en el
       instalador en vez de levantar Vite.
-- [ ] 🔴 Primer arranque asistido: crear el administrador inicial (hoy es `seed_admin.py` a mano) y
-      pedir nombre del comercio y zona horaria.
+- [x] 🔴 Primer arranque asistido — **crear el administrador inicial y el nombre del comercio, hecho
+      y verificado en el navegador** (`GET /auth/estado-inicial` + pantalla en `App.tsx`, en vez de
+      `seed_admin.py` a mano). Sigue pendiente que el instalador pida la **zona horaria**: es
+      `ZONA_HORARIA` en el `.env`, no algo que se pueda cambiar desde una pantalla web sin reiniciar
+      el proceso.
 - [ ] 🟡 Desinstalación limpia que **no borre la base ni los respaldos**.
 - [ ] 🟢 Firma de código (~USD 100-400/año). Sin esto Windows muestra el aviso de SmartScreen. Se
       puede vivir con eso al principio; a los diez clientes ya no.
