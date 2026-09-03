@@ -15,6 +15,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # en el repositorio, cualquiera podría firmar tokens válidos con ella.
 SECRET_KEY_COMPROMETIDA = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
 
+# Un solo archivo `VERSION` en la raíz del repo, leído acá y por
+# `installer/setup.iss` al empaquetar. Sin un número de versión visible,
+# soportar por teléfono a un comercio es adivinar qué tiene instalado.
+try:
+    VERSION = (BASE_DIR.parent / "VERSION").read_text(encoding="utf-8").strip()
+except FileNotFoundError:
+    VERSION = "desconocida"
+
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "APPLIFY POS"

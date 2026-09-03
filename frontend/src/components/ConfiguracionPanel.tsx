@@ -63,6 +63,15 @@ export function ConfiguracionPanel() {
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Sin esto, soportar por teléfono a un comercio es adivinar qué versión
+  // tiene instalada. Se lee de /health y no de un archivo del frontend:
+  // así siempre muestra la versión del backend que realmente está corriendo,
+  // que es la que importa cuando algo no anda.
+  const [version, setVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/health').then(r => r.json()).then(d => setVersion(d.version)).catch(() => {});
+  }, []);
 
   const cargar = () => {
     setCargando(true);
@@ -414,6 +423,12 @@ export function ConfiguracionPanel() {
           );
         })}
       </div>
+
+      {version && (
+        <p className="text-xs text-text-muted mt-6 text-center">
+          Sistema de Inventario y POS · versión {version}
+        </p>
+      )}
     </motion.div>
   );
 }

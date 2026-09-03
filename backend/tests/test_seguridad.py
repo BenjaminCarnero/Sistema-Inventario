@@ -158,6 +158,13 @@ class TestCabeceras:
         assert cabeceras["X-Content-Type-Options"] == "nosniff"
         assert "frame-ancestors 'none'" in cabeceras["Content-Security-Policy"]
 
+    def test_health_expone_la_version_instalada(self, client):
+        """Sin esto, soportar por teléfono a un comercio es adivinar qué
+        versión tiene instalada."""
+        cuerpo = client.get("/health").json()
+        assert cuerpo["version"]
+        assert cuerpo["version"] != "desconocida"
+
     def test_rechaza_peticiones_gigantes(self, client, auth_admin, producto):
         """Un pedido de varios MB dejaba al servidor colgado."""
         enorme = {

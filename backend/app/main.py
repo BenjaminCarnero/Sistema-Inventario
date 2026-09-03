@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from app import red
-from app.config import BASE_DIR, settings, es_produccion
+from app.config import BASE_DIR, settings, es_produccion, VERSION
 
 # --- Registro de errores ---------------------------------------------------
 # Sin esto los errores salen por la consola y ahí mueren: en una PC de
@@ -197,7 +197,7 @@ app.add_middleware(
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "project": settings.PROJECT_NAME}
+    return {"status": "ok", "project": settings.PROJECT_NAME, "version": VERSION}
 
 
 from app.routers import (
