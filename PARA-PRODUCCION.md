@@ -26,8 +26,9 @@
 - [x] 🔴 Correr la suite completa en `main` ya mergeado — verde en las dos configuraciones, con y sin
       `frontend/dist`, más el ciclo de migraciones `up/down/up`. Se repitió después de cada tanda de
       cambios de esta sesión y siguió verde.
-- [ ] 🔴 **Decidir el alcance fiscal** (ver §10). Sigue sin decidirse. No se puede escribir una
-      propuesta comercial sin esta decisión, y condiciona el precio y el segmento.
+- [x] 🔴 **Decidir el alcance fiscal** (ver §10) — **decidido el 03/09/2026: opción B**, ticket no
+      fiscal. Junto con el modelo de cobro (§8) y el tipo de licencia (§8), ya hay con qué escribir
+      una propuesta comercial; falta redactarla, que es trabajo de contenido, no de código.
 
 ---
 
@@ -212,7 +213,9 @@ No hay monitoreo, ni alertas, ni procedimiento de qué hacer cuando llama un loc
 disco (bien) pero nadie los mira desde afuera. **Con cinco clientes, esto es el trabajo de todos los
 días si no se resuelve antes.**
 
-- [ ] 🟡 Un canal de soporte que exista de verdad (WhatsApp alcanza) y un horario declarado
+- [ ] 🟡 Un canal de soporte que exista de verdad — **decidido el 03/09/2026: WhatsApp Business con
+      horario comercial declarado** (no el número personal). Falta sólo el dato real: número y
+      horario concretos para publicarlos en la propuesta comercial y en el manual del comerciante.
 - [x] 🟡 Forma de traerte los logs de un local sin pedirle al dueño que busque carpetas — **hecho y
       verificado de punta a punta**: `GET /logs/descargar` arma un `.zip` con `backend.log` y los
       rotados (`.1` a `.5`), y un botón en Configuración › Copias de seguridad lo baja con un clic.
@@ -226,13 +229,24 @@ días si no se resuelve antes.**
 
 Nada de esto existe hoy y todo es barato de resolver.
 
-- [ ] 🟡 Archivo `LICENSE` en el repositorio
+- [x] 🟡 Archivo `LICENSE` en el repositorio — **hecho el 03/09/2026**: propietario, todos los
+      derechos reservados (decisión tomada ese día). El uso por parte de un comercio queda remitido
+      al contrato de licencia, que es el ítem que sigue sin escribir.
 - [ ] 🟡 Contrato de licencia: qué incluye, qué no, y **límite de responsabilidad si se pierde la
-      base**
+      base** — sigue sin redactarse. Ahora sí hay un modelo de cobro decidido en qué basarlo
+      (suscripción mensual por local, ver abajo); falta el texto legal en sí, idealmente revisado por
+      alguien con matrícula.
 - [ ] 🟡 Política de datos: los datos son del comercio, dónde viven, qué pasa si deja de pagar
-- [ ] 🟡 Precio y forma de cobro definidos (ver §9.7 de `ANALISIS-PRE-VENTA.md`)
-- [ ] 🟡 Qué pasa con los datos cuando un cliente se va: **exportación garantizada**. Que exista y
-      esté escrita es argumento de venta, no un riesgo
+- [x] 🟡 Precio y forma de cobro — **decidido el 03/09/2026: suscripción mensual por local**, en línea
+      con lo que ya proponía `ANALISIS-PRE-VENTA.md` §9.5-9.7 (más un cargo único de instalación).
+      Con esto elegido, el "chequeo falla abierto" de §9 deja de ser una idea abstracta: una
+      suscripción que se corta si el servidor de licencias se cae de verdad le rompe la venta al
+      comercio, así que esa regla no se negocia el día que se construya.
+- [x] 🟡 Qué pasa con los datos cuando un cliente se va: **exportación garantizada** — **ya existe,
+      sólo faltaba decirlo**: la descarga de un respaldo (`GET /respaldos/{nombre}`, con pantalla en
+      Configuración) baja la base SQLite completa, que es más completo que cualquier exportación a
+      Excel. Falta que el contrato de licencia lo declare explícitamente como garantía, no algo que
+      dependa de pedirlo.
 
 ## 9 · Licenciamiento 🟡 — antes de cobrar, no antes de pilotear
 
@@ -245,23 +259,23 @@ sigue usando el sistema, con el código en su máquina.
       contradice la promesa central del producto y es un problema legal, no un bug
 - [ ] 🟡 Panel propio con las instalaciones activas, su versión y su última señal
 
-## 10 · Lo fiscal — la decisión 🔴
+## 10 · Lo fiscal — la decisión 🔴 ✅ DECIDIDO el 03/09/2026: opción B
 
 Verificado: **cero** referencias a AFIP/ARCA, CAE, punto de venta fiscal o tipos de comprobante en
 todo el código. `cuit` es un campo de texto en la ficha del proveedor. El sistema emite un ticket
 interno, no un comprobante.
 
-Hay dos caminos y **hay que elegir uno ahora**, no descubrirlo en la demo:
-
 - [ ] **A** — Implementar WSFEv1: certificado, homologación, tipos A/B/C y notas de crédito para las
       devoluciones que ya existen. **4 a 8 semanas** y hay que hacerlo bien: un comprobante mal
-      emitido es un problema del cliente con el fisco.
-- [ ] **B** — Salir como **sistema de gestión e inventario con ticket no fiscal**, integrable
+      emitido es un problema del cliente con el fisco. **No elegido.**
+- [x] **B** — Salir como **sistema de gestión e inventario con ticket no fiscal**, integrable
       después. Es un producto legítimo y más chico, pero **tiene que estar escrito en la propuesta
-      comercial**, no aclararse cuando el cliente pregunta.
+      comercial**, no aclararse cuando el cliente pregunta. **Elegido.** Falta redactar esa aclaración
+      en el material comercial (todavía no existe una propuesta comercial escrita).
 
-> Si se elige A, antes hay que migrar el dinero de `FLOAT` a centavos enteros (§11). Con
-> comprobantes fiscales de por medio, ese redondeo deja de ser teórico.
+> Con la opción B, migrar el dinero de `FLOAT` a centavos enteros (§11, M-12) deja de ser una
+> urgencia — sigue siendo deuda técnica real, pero ya no bloquea nada. Se vuelve a poner sobre la mesa
+> el día que se reconsidere la opción A.
 
 ## 11 · Deuda técnica que puede esperar 🟢
 
