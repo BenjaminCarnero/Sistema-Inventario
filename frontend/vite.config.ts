@@ -76,6 +76,7 @@ export default defineConfig({
       // resuelve. Exactamente el mismo bug que ya se había dado con
       // /auditoria y /respaldos — este router es nuevo y quedó afuera igual.
       '/impresion': 'http://127.0.0.1:8001',
+      '/logs': 'http://127.0.0.1:8001',
       // Lo usa el POS para saber si el servidor responde de verdad
       '/health': 'http://127.0.0.1:8001',
     }

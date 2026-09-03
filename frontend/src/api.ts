@@ -258,6 +258,28 @@ export const api = {
     URL.revokeObjectURL(url);
   },
 
+  /**
+   * Baja un .zip con los logs del backend, para poder mandarlos por soporte
+   * sin pedirle al dueño del comercio que busque una carpeta que no sabe
+   * que existe.
+   */
+  async descargarLogs() {
+    const res = await fetch(`${API_URL}/logs/descargar`, { headers: this.headers });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'No se pudieron descargar los logs');
+
+    const blob = await res.blob();
+    const nombre = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') || '')?.[1] || 'logs.zip';
+    const url = URL.createObjectURL(blob);
+    const enlace = document.createElement('a');
+    enlace.href = url;
+    enlace.download = nombre;
+    document.body.appendChild(enlace);
+    enlace.click();
+    enlace.remove();
+    URL.revokeObjectURL(url);
+  },
+
   // --- Productos: baja lógica ----------------------------------------------
 
   async darDeBajaProducto(id: number) {

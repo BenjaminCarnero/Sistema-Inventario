@@ -213,7 +213,10 @@ disco (bien) pero nadie los mira desde afuera. **Con cinco clientes, esto es el 
 días si no se resuelve antes.**
 
 - [ ] 🟡 Un canal de soporte que exista de verdad (WhatsApp alcanza) y un horario declarado
-- [ ] 🟡 Forma de traerte los logs de un local sin pedirle al dueño que busque carpetas
+- [x] 🟡 Forma de traerte los logs de un local sin pedirle al dueño que busque carpetas — **hecho y
+      verificado de punta a punta**: `GET /logs/descargar` arma un `.zip` con `backend.log` y los
+      rotados (`.1` a `.5`), y un botón en Configuración › Copias de seguridad lo baja con un clic.
+      Probado bajando un zip real con los logs de esta misma sesión.
 - [ ] 🟡 Aviso cuando un local deja de reportar (indica servicio caído, no local cerrado)
 - [ ] 🟡 Manual del comerciante de una página: cómo abrir caja, vender, cerrar, y qué hacer si no
       anda internet

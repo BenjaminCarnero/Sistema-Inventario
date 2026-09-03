@@ -72,7 +72,7 @@ PREFIJOS_API = (
     "/auth", "/productos", "/ventas", "/cajas", "/reportes", "/pagos",
     "/descuentos", "/configuracion", "/devoluciones", "/stock", "/categorias",
     "/proveedores", "/pedidos", "/auditoria", "/respaldos", "/actualizaciones",
-    "/impresion",
+    "/impresion", "/logs",
     "/health", "/docs", "/redoc", "/openapi.json",
 )
 
@@ -204,7 +204,7 @@ def health_check():
 from app.routers import (
     auth, productos, ventas, cajas, reportes, pagos, descuentos,
     configuracion, devoluciones, stock, categorias, proveedores, pedidos,
-    auditoria, respaldos, actualizaciones, impresion,
+    auditoria, respaldos, actualizaciones, impresion, logs,
 )
 app.include_router(auth.router)
 app.include_router(productos.router)
@@ -223,6 +223,7 @@ app.include_router(auditoria.router)
 app.include_router(respaldos.router)
 app.include_router(actualizaciones.router)
 app.include_router(impresion.router)
+app.include_router(logs.router)
 
 
 # --- Frontend ---------------------------------------------------------------

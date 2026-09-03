@@ -44,6 +44,7 @@ export function RespaldosPanel() {
   const [estadoExterno, setEstadoExterno] = useState<EstadoExterno | null>(null);
   const [creando, setCreando] = useState(false);
   const [bajando, setBajando] = useState<string | null>(null);
+  const [bajandoLogs, setBajandoLogs] = useState(false);
   const [vuelta, setVuelta] = useState(0);
 
   useEffect(() => {
@@ -103,6 +104,17 @@ export function RespaldosPanel() {
       showToast(e instanceof Error ? e.message : 'No se pudo descargar la copia', 'error');
     } finally {
       setBajando(null);
+    }
+  };
+
+  const descargarLogs = async () => {
+    setBajandoLogs(true);
+    try {
+      await api.descargarLogs();
+    } catch (e: unknown) {
+      showToast(e instanceof Error ? e.message : 'No se pudieron descargar los logs', 'error');
+    } finally {
+      setBajandoLogs(false);
     }
   };
 
@@ -207,6 +219,26 @@ export function RespaldosPanel() {
             </table>
           </div>
         )}
+      </div>
+
+      <div className="glass-card p-6 mt-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold">Soporte técnico</h3>
+            <p className="text-sm text-text-muted mt-1">
+              Bajate los registros de error del backend para mandárselos a quien te da soporte,
+              sin tener que buscar ninguna carpeta a mano.
+            </p>
+          </div>
+          <button
+            onClick={descargarLogs}
+            disabled={bajandoLogs}
+            className="bg-white/5 hover:bg-white/10 disabled:opacity-50 px-4 py-2.5 rounded-lg text-sm font-semibold inline-flex items-center gap-2 transition-colors shrink-0"
+          >
+            <Download size={15} />
+            {bajandoLogs ? 'Bajando…' : 'Descargar logs'}
+          </button>
+        </div>
       </div>
     </motion.div>
   );
