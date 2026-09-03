@@ -21,13 +21,13 @@
 
 ## 0 · Antes que nada — 1 día
 
-- [ ] 🔴 **Mergear `arreglos-pre-venta` a `main`.** Hoy hay **7 commits** con todos los arreglos
-      fuera de la rama principal. Mientras estén ahí, CI protege una rama que no es la que se
-      despliega.
-- [ ] 🔴 Correr la suite completa en `main` ya mergeado: `pytest` (backend, ~2:30) y `pnpm test`
-      (frontend). Verde en las dos configuraciones, con y sin `frontend/dist`.
-- [ ] 🔴 **Decidir el alcance fiscal** (ver §10). No se puede escribir una propuesta comercial sin
-      esta decisión, y condiciona el precio y el segmento.
+- [x] 🔴 **Mergear `arreglos-pre-venta` a `main`.** Hecho el 02/09/2026: fast-forward limpio, sin
+      conflictos, pusheado a `origin/main`.
+- [x] 🔴 Correr la suite completa en `main` ya mergeado — verde en las dos configuraciones, con y sin
+      `frontend/dist`, más el ciclo de migraciones `up/down/up`. Se repitió después de cada tanda de
+      cambios de esta sesión y siguió verde.
+- [ ] 🔴 **Decidir el alcance fiscal** (ver §10). Sigue sin decidirse. No se puede escribir una
+      propuesta comercial sin esta decisión, y condiciona el precio y el segmento.
 
 ---
 
@@ -52,9 +52,9 @@ dueño de una verdulería, y no se puede repetir en veinte locales.**
       propósito en `backend/` (si no, la base y los logs se crean vacíos en el lugar equivocado la
       primera vez que arranca). Sin NSSM instalado en esta máquina, no se probó instalando un
       servicio real — sólo se verificó que frena correctamente sin permisos de administrador.
-- [ ] 🔴 Un solo puerto y un solo proceso: FastAPI ya sirve el `dist` (`FRONTEND_DIST` en el
-      `.env`, catch-all en `main.py:231`). **Esto ya está hecho** — sólo hay que usarlo en el
-      instalador en vez de levantar Vite.
+- [x] 🔴 Un solo puerto y un solo proceso: FastAPI ya sirve el `dist` (`FRONTEND_DIST` en el
+      `.env`, catch-all en `main.py:231`), y `installer/setup.iss` empaqueta `frontend/dist` y nunca
+      levanta Vite — usa este mismo camino.
 - [x] 🔴 Primer arranque asistido — **crear el administrador inicial y el nombre del comercio, hecho
       y verificado en el navegador** (`GET /auth/estado-inicial` + pantalla en `App.tsx`, en vez de
       `seed_admin.py` a mano). La **zona horaria** la pide `installer/scripts/generar-env.ps1` al
