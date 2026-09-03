@@ -18,6 +18,7 @@ import { recordarCaja, cajaRecordada, cajaProvisoria, esProvisoria } from './caj
 import { recordarAcceso, validarOffline, hayCredencialesGuardadas } from './sesionLocal';
 import { Logo, LogoMark } from './components/Logo';
 import { ProductImage } from './components/ProductImage';
+import { DiagnosticoRed } from './components/DiagnosticoRed';
 
 /** Presentación de cada método de pago. La lista real sale de la configuración. */
 const METODOS_PAGO: Record<string, { etiqueta: string; icono: typeof Banknote; color: string }> = {
@@ -67,6 +68,7 @@ function POS() {
   const [nombreComercioInicial, setNombreComercioInicial] = useState('');
   const [pinConfirmado, setPinConfirmado] = useState('');
   const [enviandoPrimerArranque, setEnviandoPrimerArranque] = useState(false);
+  const [mostrarDiagnostico, setMostrarDiagnostico] = useState(false);
   
   // Caja States
   const [caja, setCaja] = useState<any>(null);
@@ -941,7 +943,14 @@ function POS() {
               Ingresar al POS
             </button>
           </form>
+          <button
+            onClick={() => setMostrarDiagnostico(true)}
+            className="w-full text-center text-xs text-text-muted hover:text-text-secondary mt-4 underline"
+          >
+            ¿No podés entrar? Diagnóstico de conexión
+          </button>
         </motion.div>
+        {mostrarDiagnostico && <DiagnosticoRed onClose={() => setMostrarDiagnostico(false)} />}
       </div>
     );
   }

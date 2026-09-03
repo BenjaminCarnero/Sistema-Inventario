@@ -114,7 +114,11 @@ autofirmado es una pantalla roja de advertencia que el cajero va a aprender a ig
       y no cámara.
 - [ ] 🔴 Documentar la configuración de red: IP fija en la PC servidor, puerto abierto en el firewall
       de Windows, y qué hacer cuando el router reparte otra IP.
-- [ ] 🟡 Pantalla de diagnóstico: contra qué servidor está hablando este equipo y si lo alcanza.
+- [x] 🟡 Pantalla de diagnóstico — **hecho y verificado en el navegador**. Un link discreto en el
+      login ("¿No podés entrar? Diagnóstico de conexión", `components/DiagnosticoRed.tsx`) muestra la
+      dirección a la que está hablando el equipo, si el servidor contesta y en cuánto, la versión, y
+      una lista de qué revisar si no llega. Probados los dos estados reales: servidor arriba y
+      servidor apagado.
 
 ## 5 · Respaldos que alguien probó restaurar 🔴 — 2 días
 
