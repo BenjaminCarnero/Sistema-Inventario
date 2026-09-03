@@ -219,6 +219,13 @@ export const api = {
     return this.parseJson(res, 'Respaldos');
   },
 
+  async getEstadoRespaldoExterno() {
+    const res = await fetch(`${API_URL}/respaldos/estado-externo`, { headers: this.headers });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'No se pudo consultar el respaldo externo');
+    return this.parseJson(res, 'Respaldo externo');
+  },
+
   async crearRespaldo() {
     const res = await fetch(`${API_URL}/respaldos/`, { method: 'POST', headers: this.headers });
     if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }

@@ -108,6 +108,73 @@ class TestRespaldoExterno:
             assert r.status_code in (404, 400), nombre
 
 
+class TestEstadoExterno:
+    """Aviso de "hace cuánto no hay una copia fuera de este disco"."""
+
+    def test_sin_configurar_no_es_alarma(self, monkeypatch):
+        """Ya está claro en Configuración que RESPALDO_EXTERNO está vacío;
+        avisar dos veces de lo mismo no ayuda a nadie a arreglarlo."""
+        monkeypatch.setattr(settings, "RESPALDO_EXTERNO", "")
+        r = respaldos.estado_externo()
+        assert r["configurado"] is False
+        assert r["en_alarma"] is False
+
+    def test_configurado_pero_inalcanzable_es_alarma(self, tmp_path, monkeypatch):
+        """El pendrive no está puesto, o la carpeta de OneDrive no existe en
+        esta cuenta: las copias que se creyeron hechas nunca salieron de acá."""
+        monkeypatch.setattr(settings, "RESPALDO_EXTERNO", str(tmp_path / "no-existe"))
+        r = respaldos.estado_externo()
+        assert r["configurado"] is True
+        assert r["alcanzable"] is False
+        assert r["en_alarma"] is True
+
+    def test_configurado_pero_sin_ninguna_copia_todavia_es_alarma(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(settings, "RESPALDO_EXTERNO", str(tmp_path))
+        r = respaldos.estado_externo()
+        assert r["alcanzable"] is True
+        assert r["en_alarma"] is True
+        assert r["ultimo"] is None
+
+    def test_con_una_copia_reciente_no_hay_alarma(self, client, tmp_path, monkeypatch):
+        local, afuera = tmp_path / "local", tmp_path / "afuera"
+        local.mkdir()
+        monkeypatch.setattr(respaldos, "CARPETA", local)
+        monkeypatch.setattr(settings, "RESPALDO_EXTERNO", str(afuera))
+
+        respaldos.crear("prueba")
+
+        r = respaldos.estado_externo()
+        assert r["en_alarma"] is False
+        assert r["dias_desde_ultimo"] < 1
+        assert r["ultimo"] is not None
+
+    def test_con_una_copia_vieja_hay_alarma(self, client, tmp_path, monkeypatch):
+        import os
+        import time
+
+        local, afuera = tmp_path / "local", tmp_path / "afuera"
+        local.mkdir()
+        monkeypatch.setattr(respaldos, "CARPETA", local)
+        monkeypatch.setattr(settings, "RESPALDO_EXTERNO", str(afuera))
+
+        ruta = respaldos.crear("prueba")
+        copia_externa = afuera / ruta.name
+        vieja = time.time() - (respaldos.DIAS_DE_ALARMA_SIN_RESPALDO_EXTERNO + 1) * 86400
+        os.utime(copia_externa, (vieja, vieja))
+
+        r = respaldos.estado_externo()
+        assert r["en_alarma"] is True
+        assert r["dias_desde_ultimo"] > respaldos.DIAS_DE_ALARMA_SIN_RESPALDO_EXTERNO
+
+    def test_solo_el_admin_puede_consultarlo(self, client, auth_cajero, admin):
+        assert client.get("/respaldos/estado-externo", headers=auth_cajero).status_code == 403
+
+    def test_el_admin_lo_consulta(self, client, auth_admin):
+        r = client.get("/respaldos/estado-externo", headers=auth_admin)
+        assert r.status_code == 200
+        assert "en_alarma" in r.json()
+
+
 class TestAuditoria:
     def test_registra_el_cambio_de_precio(self, client, auth_admin, producto):
         client.put(f"/productos/{producto.id}", headers=auth_admin, json={"precio_venta": 1500})

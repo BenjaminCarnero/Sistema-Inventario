@@ -24,6 +24,14 @@ interface Copia {
   fecha_hora: string;
 }
 
+interface EstadoExterno {
+  configurado: boolean;
+  alcanzable: boolean;
+  ultimo: string | null;
+  dias_desde_ultimo: number | null;
+  en_alarma: boolean;
+}
+
 function enMegas(bytes: number) {
   return `${(bytes / 1_048_576).toFixed(1)} MB`;
 }
@@ -33,6 +41,7 @@ export function RespaldosPanel() {
   // `null` es "todavía no cargó": un estado aparte para eso habría que
   // encenderlo dentro del efecto, que dispara un render en cascada.
   const [copias, setCopias] = useState<Copia[] | null>(null);
+  const [estadoExterno, setEstadoExterno] = useState<EstadoExterno | null>(null);
   const [creando, setCreando] = useState(false);
   const [bajando, setBajando] = useState<string | null>(null);
   const [vuelta, setVuelta] = useState(0);
@@ -47,6 +56,13 @@ export function RespaldosPanel() {
         setCopias([]);
         showToast(e instanceof Error ? e.message : 'No se pudieron listar los respaldos', 'error');
       });
+
+    // Si esto falla (por ejemplo, sin conexión) se queda en null y
+    // simplemente no se muestra el aviso: no es motivo para romper el resto
+    // de la pantalla ni para insistirle al usuario con un error de más.
+    api.getEstadoRespaldoExterno()
+      .then((datos: EstadoExterno) => { if (vigente) setEstadoExterno(datos); })
+      .catch(() => {});
 
     return () => { vigente = false; };
   }, [vuelta, showToast]);
@@ -113,17 +129,40 @@ export function RespaldosPanel() {
           </button>
         </div>
 
-        <div className="flex gap-3 items-start bg-status-warning/10 border border-status-warning/30 rounded-lg p-4 mb-5">
-          <AlertTriangle className="text-status-warning shrink-0 mt-0.5" size={18} />
-          <p className="text-sm text-text-secondary">
-            Estas copias viven en el mismo disco que la base, así que no sirven si ese disco
-            se rompe. Bajate una cada tanto y guardala en otro lado, o configurá
-            <span className="font-mono text-xs mx-1 text-text-primary">RESPALDO_EXTERNO</span>
-            en el <span className="font-mono text-xs">.env</span> del backend para que se
-            duplique sola. <strong className="text-text-primary">Y probá restaurar una antes
-            de necesitarla:</strong> un respaldo que nadie probó no es un respaldo.
-          </p>
-        </div>
+        {estadoExterno?.en_alarma ? (
+          <div className="flex gap-3 items-start bg-status-error/10 border border-status-error/30 rounded-lg p-4 mb-5">
+            <AlertTriangle className="text-status-error shrink-0 mt-0.5" size={18} />
+            <p className="text-sm text-text-secondary">
+              {!estadoExterno.configurado ? (
+                <>No hay ninguna copia fuera de este disco. Estas copias no sirven si el disco
+                  se rompe o se pierde la computadora.</>
+              ) : !estadoExterno.alcanzable ? (
+                <>No se puede llegar a la carpeta de respaldo externo configurada — ¿el pendrive
+                  está puesto? ¿la carpeta de OneDrive/Drive sigue existiendo en esta cuenta?</>
+              ) : estadoExterno.dias_desde_ultimo == null ? (
+                <>La carpeta de respaldo externo está configurada, pero todavía no hay ninguna
+                  copia adentro.</>
+              ) : (
+                <>Hace <strong className="text-text-primary">{estadoExterno.dias_desde_ultimo}</strong> días
+                  que no se hace una copia fuera de este disco.</>
+              )}
+              {' '}Configurá <span className="font-mono text-xs mx-1 text-text-primary">RESPALDO_EXTERNO</span>
+              en el <span className="font-mono text-xs">.env</span> del backend para que se duplique sola.
+            </p>
+          </div>
+        ) : (
+          <div className="flex gap-3 items-start bg-status-warning/10 border border-status-warning/30 rounded-lg p-4 mb-5">
+            <AlertTriangle className="text-status-warning shrink-0 mt-0.5" size={18} />
+            <p className="text-sm text-text-secondary">
+              {estadoExterno?.configurado && estadoExterno.dias_desde_ultimo != null && (
+                <>Última copia fuera de este disco: hace {estadoExterno.dias_desde_ultimo < 1
+                  ? 'menos de un día' : `${estadoExterno.dias_desde_ultimo} días`}. </>
+              )}
+              <strong className="text-text-primary">Probá restaurar una antes de necesitarla:</strong> un
+              respaldo que nadie probó no es un respaldo.
+            </p>
+          </div>
+        )}
 
         {cargando ? (
           <div className="space-y-2">

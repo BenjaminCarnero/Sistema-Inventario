@@ -158,10 +158,16 @@ El sistema hace respaldos automáticos al cerrar caja y tiene pantalla propia. B
       `.reemplazada_<fecha>` de la base rota antes de pisarla. El backend volvió a arrancar sobre la
       base restaurada y el login siguió andando. Sigue pendiente probarlo en una VM de Windows limpia
       de verdad — esto prueba que el mecanismo funciona, no reemplaza esa prueba antes de vender.
-- [ ] 🔴 Que el instalador configure `RESPALDO_EXTERNO` apuntando a OneDrive, Drive o un pendrive.
-      Hoy depende de que el dueño edite el `.env`, o sea que **no va a pasar nunca** y las copias van
-      a quedar en el mismo disco que se puede romper.
-- [ ] 🟡 Aviso visible cuando hace más de X días que no se hace un respaldo externo.
+- [x] 🔴 Que el instalador configure `RESPALDO_EXTERNO` apuntando a OneDrive, Drive o un pendrive —
+      **ya resuelto**: `installer/scripts/generar-env.ps1` lo pide en la instalación (opcional) y lo
+      escribe en el `.env`, en vez de depender de que el dueño lo edite a mano después. Esto se hizo
+      junto con el resto del instalador (§1) y se había quedado sin tildar acá.
+- [x] 🟡 Aviso visible cuando hace más de X días que no se hace un respaldo externo — **hecho y
+      verificado en el navegador en los tres estados**: sin configurar, configurado pero
+      inalcanzable (el pendrive no está puesto, la carpeta ya no existe) y con copias pero
+      vencidas, todos tratados como alarma; con una copia reciente se ve un aviso tranquilizador en
+      vez de rojo. `GET /respaldos/estado-externo` mira la carpeta externa directo — no un registro
+      aparte que se podría desincronizar — y el umbral es fijo en 2 días.
 - [ ] 🟢 Cifrado de los respaldos (M-09). Sigue abierto a propósito: hay que decidir dónde vive la
       frase de paso, y perderla es peor que el problema que resuelve.
 

@@ -155,3 +155,57 @@ def ruta_de(nombre: str) -> Optional[Path]:
     if candidato.parent != CARPETA.resolve() or not candidato.exists():
         return None
     return candidato
+
+
+# Más de esto sin una copia fuera del disco es una alarma: con un respaldo
+# por cierre de caja, un comercio que abre todos los días debería generar uno
+# nuevo seguido. Fijo y no configurable a propósito, para no sumarle una
+# opción más a una pantalla que ya tiene bastantes.
+DIAS_DE_ALARMA_SIN_RESPALDO_EXTERNO = 2
+
+
+def estado_externo() -> dict:
+    """Hace cuánto hay una copia en `RESPALDO_EXTERNO`, si está configurado.
+
+    Se mira la carpeta externa directamente en vez de guardar un registro
+    aparte: `_copiar_afuera` ya deja ahí el mismo nombre de archivo que la
+    copia local, así que la fecha del archivo más nuevo *es* la fecha del
+    último respaldo externo que salió bien. Un registro aparte podría
+    desincronizarse; leer la carpeta no puede mentir.
+    """
+    destino_externo = (settings.RESPALDO_EXTERNO or "").strip()
+    resultado = {
+        "configurado": bool(destino_externo),
+        "alcanzable": False,
+        "ultimo": None,
+        "dias_desde_ultimo": None,
+        "en_alarma": False,
+    }
+    if not destino_externo:
+        # Sin destino configurado no hay "alarma": ya está claro en la
+        # pantalla de Configuración que RESPALDO_EXTERNO está vacío, y avisar
+        # dos veces de lo mismo no ayuda a nadie a arreglarlo.
+        return resultado
+
+    carpeta = Path(destino_externo)
+    if not carpeta.exists():
+        # Configurado pero inalcanzable (el pendrive no está puesto, la
+        # carpeta de OneDrive no existe en esta cuenta) es tan grave como no
+        # tener nada: las copias que se creyeron hechas nunca salieron de acá.
+        resultado["en_alarma"] = True
+        return resultado
+
+    resultado["alcanzable"] = True
+    copias = sorted(carpeta.glob(f"{PREFIJO}*{SUFIJO}"))
+    if not copias:
+        resultado["en_alarma"] = True
+        return resultado
+
+    ultimo_mtime = copias[-1].stat().st_mtime
+    ultimo = datetime.fromtimestamp(ultimo_mtime)
+    dias = (datetime.now() - ultimo).total_seconds() / 86400
+
+    resultado["ultimo"] = ultimo
+    resultado["dias_desde_ultimo"] = round(dias, 1)
+    resultado["en_alarma"] = dias > DIAS_DE_ALARMA_SIN_RESPALDO_EXTERNO
+    return resultado

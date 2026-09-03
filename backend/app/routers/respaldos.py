@@ -21,6 +21,16 @@ def listar_respaldos(
     return [schemas.Respaldo(**r) for r in respaldos.listar()]
 
 
+@router.get("/estado-externo")
+def estado_del_respaldo_externo(
+    current_user: models.Usuario = Depends(solo_admin),
+):
+    """Hace cuánto hay una copia en `RESPALDO_EXTERNO`. Un respaldo que sólo
+    vive en este disco no protege del caso más común: que este disco se
+    rompa o se pierda la computadora."""
+    return respaldos.estado_externo()
+
+
 @router.post("/", response_model=schemas.Respaldo, status_code=status.HTTP_201_CREATED)
 def crear_respaldo(
     db: Session = Depends(database.get_db),
