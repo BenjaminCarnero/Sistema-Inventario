@@ -1024,6 +1024,15 @@ function POS() {
             {isOffline ? <WifiOff className="text-status-error" /> : <Wifi className="text-status-success" />}
             <span className="text-sm text-text-secondary hidden md:inline">{isOffline ? 'Sin conexión' : 'En línea'}</span>
           </div>
+          {lastSale && (
+            <button
+              onClick={() => handleImprimir(lastSale)}
+              title="Reimprimir el ticket de la última venta"
+              className="flex items-center gap-1.5 text-xs font-semibold bg-white/5 hover:bg-white/10 text-text-secondary px-2.5 py-1.5 rounded-lg border border-white/10 transition-colors"
+            >
+              <Printer size={14} /> <span className="hidden md:inline">Reimprimir última venta</span>
+            </button>
+          )}
           {caja && (
             <button onClick={() => setShowCloseCaja(true)} className="bg-status-error/20 text-status-error hover:bg-status-error/30 px-3 py-1 rounded-md text-sm font-semibold transition-colors">
               Cerrar Caja

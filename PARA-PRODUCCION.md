@@ -114,7 +114,10 @@ aparece un bug en el arqueo, la única forma es ir o pedir escritorio remoto, lo
       el ESC/POS**: nombre, dirección, CUIT/teléfono si están cargados, detalle con cantidad y
       precio, descuento aplicado, desglose de IVA, total, forma de pago (recibido/vuelto en efectivo,
       "Abonado con X" en el resto) y número de operación.
-- [ ] 🟡 Reimpresión del último ticket. Se pide el primer día de uso, siempre.
+- [x] 🟡 Reimpresión del último ticket — **hecho y verificado en el navegador**. Un botón discreto
+      "Reimprimir última venta" en el header del POS, habilitado mientras haya una venta en memoria
+      (sobrevive a cerrar el modal del ticket), reusando el mismo camino térmica/`window.print()` que
+      el botón original.
 - [ ] 🟢 Comprar una impresora propia (~$70.000 a $80.000, una sola vez) para desarrollar y para las
       demos.
 
@@ -180,16 +183,28 @@ El sistema hace respaldos automáticos al cerrar caja y tiene pantalla propia. B
 `config.py` **aborta el arranque** si esto está mal, que es lo correcto. Que el instalador lo deje
 resuelto, no el manual.
 
-- [ ] `ENTORNO=produccion` — exige `SECRET_KEY`, prohíbe CORS `*`, oculta `/docs`, activa HSTS
-- [ ] `SECRET_KEY` generada **única por instalación** (nunca la misma en dos locales)
-- [ ] `CORS_ORIGINS` con la dirección real, nunca `*`
-- [ ] `ZONA_HORARIA=America/Argentina/Buenos_Aires` — sin esto el arqueo corta el día donde no es
-- [ ] `FRONTEND_URL` con la dirección pública real: apuntando a `localhost`, el que paga por QR desde
-      su celular termina en una página que sólo existe en la máquina de la caja
-- [ ] `MERCADOPAGO_ACCESS_TOKEN` productivo (`APP_USR-`), no el de pruebas (`TEST-`)
-- [ ] `RESPALDO_EXTERNO` apuntando a una carpeta que se sincroniza sola
-- [ ] `PROXIES_CONFIABLES=1` **sólo** si hay un reverse proxy adelante
-- [ ] `FRONTEND_DIST` apuntando al `dist` compilado
+**`installer/scripts/generar-env.ps1` ya resuelve todo esto** (ver §1). Sigue sin compilarse y
+correrse como instalador real —por eso el checklist entero sigue en pie como algo para volver a
+verificar el día que exista un instalador de verdad—, pero el código que lo resuelve está escrito y
+lo que se pudo probar sin instalar nada (que el `.env` generado pasa la validación estricta) salió
+bien:
+
+- [x] `ENTORNO=produccion` — el template lo fija siempre; exige `SECRET_KEY`, prohíbe CORS `*`, oculta
+      `/docs`, activa HSTS
+- [x] `SECRET_KEY` generada **única por instalación** — `RNGCryptoServiceProvider`, no un valor fijo
+- [x] `CORS_ORIGINS` con la dirección real — se arma a partir de lo que se pide en "Dirección pública
+      del servidor", nunca `*`
+- [x] `ZONA_HORARIA=America/Argentina/Buenos_Aires` — se pregunta explícitamente, con ese valor
+      sugerido por defecto
+- [x] `FRONTEND_URL` con la dirección pública real — el script **rechaza dejarlo vacío o en
+      localhost** antes de seguir
+- [x] `MERCADOPAGO_ACCESS_TOKEN` productivo — se pregunta (opcional: sin él, el cobro por QR queda
+      apagado hasta cargarlo después, no rompe el arranque)
+- [x] `RESPALDO_EXTERNO` apuntando a una carpeta que se sincroniza sola — se pregunta (opcional)
+- [x] `PROXIES_CONFIABLES=1` **sólo** si hay un reverse proxy adelante — parámetro del script,
+      default 0 (correcto para una instalación de un solo local sin proxy adelante)
+- [x] `FRONTEND_DIST` apuntando al `dist` compilado — se calcula solo a partir de la estructura de
+      carpetas de la instalación (`{app}\frontend\dist`), no hay que tocarlo
 
 ## 7 · Operación y soporte 🟡 — 1 semana
 
