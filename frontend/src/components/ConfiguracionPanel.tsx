@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Store, Percent, Coins, ShoppingBag, Receipt, RotateCcw, Save, AlertTriangle, Palette, Upload, Image as ImageIcon } from 'lucide-react';
+import { Store, Percent, Coins, ShoppingBag, Receipt, RotateCcw, Save, AlertTriangle, Palette, Upload, Image as ImageIcon, ArrowUpCircle } from 'lucide-react';
 import { api } from '../api';
 import { useUI } from './UIProvider';
 import { useConfig } from './ConfigProvider';
@@ -68,9 +68,16 @@ export function ConfiguracionPanel() {
   // así siempre muestra la versión del backend que realmente está corriendo,
   // que es la que importa cuando algo no anda.
   const [version, setVersion] = useState<string | null>(null);
+  // null = todavía no se sabe / no se pudo consultar (sin red, GitHub caído,
+  // el repositorio sin releases). En ningún caso se avisa nada raro al
+  // cajero: esto es un chequeo informativo, nunca una condición para vender.
+  const [actualizacion, setActualizacion] = useState<{ version_disponible: string; url: string | null } | null>(null);
 
   useEffect(() => {
     fetch('/health').then(r => r.json()).then(d => setVersion(d.version)).catch(() => {});
+    api.chequearActualizacion()
+      .then(d => { if (d.hay_actualizacion) setActualizacion(d); })
+      .catch(() => {});
   }, []);
 
   const cargar = () => {
@@ -360,6 +367,22 @@ export function ConfiguracionPanel() {
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="max-w-3xl">
+      {actualizacion && (
+        <div className="mb-6 p-4 rounded-xl bg-brand/10 border border-brand/20 flex items-center gap-3">
+          <ArrowUpCircle size={20} className="text-brand-light shrink-0" />
+          <p className="text-sm text-text-secondary">
+            Hay una versión nueva disponible: <strong className="text-text-primary">{actualizacion.version_disponible}</strong>.
+            {' '}Para actualizar corré <code className="text-xs bg-black/20 px-1.5 py-0.5 rounded">installer\scripts\actualizar.ps1</code> como
+            administrador en la PC servidor (hace un respaldo antes y revierte solo si algo falla).
+            {actualizacion.url && (
+              <>
+                {' '}<a href={actualizacion.url} target="_blank" rel="noreferrer" className="underline text-brand-light">Ver el detalle</a>
+              </>
+            )}
+          </p>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <p className="text-sm text-text-muted">
           Estos parámetros se aplican al POS de todos los cajeros apenas los guardás.

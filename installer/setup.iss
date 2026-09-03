@@ -61,6 +61,11 @@ Source: "..\backend\requirements.txt"; DestDir: "{app}\backend"; Flags: ignoreve
 Source: "..\backend\seed_admin.py"; DestDir: "{app}\backend"; Flags: ignoreversion
 Source: "..\backend\restaurar_respaldo.py"; DestDir: "{app}\backend"; Flags: ignoreversion
 
+; En {app}\VERSION, no en {app}\backend\VERSION: config.py la busca un nivel
+; arriba de backend/ (BASE_DIR.parent), y actualizar.ps1 la lee del mismo
+; lugar para decidir si el paquete bajado es más nuevo que lo instalado.
+Source: "..\VERSION"; DestDir: "{app}"; Flags: ignoreversion
+
 ; Frontend ya compilado. El packager tiene que correr "pnpm build" en
 ; frontend/ ANTES de compilar este instalador — no lo hace este script.
 Source: "..\frontend\dist\*"; DestDir: "{app}\frontend\dist"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -73,6 +78,7 @@ Source: "vendor\nssm.exe"; DestDir: "{app}\vendor"; Flags: ignoreversion
 Source: "scripts\generar-env.ps1"; DestDir: "{app}\installer\scripts"; Flags: ignoreversion
 Source: "scripts\instalar-servicio.ps1"; DestDir: "{app}\installer\scripts"; Flags: ignoreversion
 Source: "scripts\desinstalar-servicio.ps1"; DestDir: "{app}\installer\scripts"; Flags: ignoreversion
+Source: "scripts\actualizar.ps1"; DestDir: "{app}\installer\scripts"; Flags: ignoreversion
 
 [Run]
 ; 1) Configuración inicial — interactivo, se ve la consola a propósito.
@@ -90,9 +96,9 @@ Filename: "{app}\vendor\python-embed\python.exe"; \
     Flags: waituntilterminated
 
 ; 3) Migrar la base a la última versión. En una instalación nueva la crea
-; desde cero; en una actualización, la deja al día (ver §2 de
-; PARA-PRODUCCION.md: esto también es la mitad del camino para el botón de
-; actualización remota, que todavía no existe).
+; desde cero. Las actualizaciones posteriores no pasan por acá: las hace
+; installer\scripts\actualizar.ps1, que corre con el servicio parado y hace
+; su propio respaldo antes de migrar (ver §2 de PARA-PRODUCCION.md).
 Filename: "{app}\vendor\python-embed\python.exe"; \
     Parameters: "-m alembic upgrade head"; \
     WorkingDir: "{app}\backend"; \

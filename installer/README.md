@@ -17,6 +17,7 @@ verificó, sin instalar nada en el sistema:
 | `scripts/generar-env.ps1` | Parseo sin errores, corrida en modo `-NoInteractivo` contra una carpeta de prueba, y el `.env` que generó **pasó la validación estricta** de `ENTORNO=produccion` en `backend/app/config.py` sin abortar (se probó importando `app.config` con ese `.env`, después restaurado el original). |
 | `scripts/instalar-servicio.ps1` | Parseo sin errores. Se corrió sin privilegios de administrador y frenó con el mensaje correcto en vez de fallar feo — es lo único que se puede probar sin NSSM ni permisos elevados. |
 | `scripts/desinstalar-servicio.ps1` | Parseo sin errores. No se ejecutó de punta a punta (necesita un servicio real instalado). |
+| `scripts/actualizar.ps1` | **Probado de punta a punta, dos veces, con `-OmitirServicio`** (no necesita NSSM). Ver la sección propia más abajo — a diferencia del resto de esta carpeta, esto sí se corrió de verdad. |
 | `setup.iss` | Sólo leído contra la documentación de Inno Setup. Nunca se compiló: no hay `iscc` en esta máquina. |
 
 De hecho, escribir estos scripts sin poder correrlos ya encontró y corrigió dos
@@ -34,6 +35,42 @@ bugs reales al probarlos:
 Sin estas dos correcciones, el script habría fallado en la primera instalación
 real, en la máquina de un comercio, con un error de .NET que no dice nada
 sobre la causa.
+
+## `actualizar.ps1` — probado de punta a punta
+
+Esto cubre PARA-PRODUCCION.md §2, la parte que el documento marca como "lo más
+importante de todo el documento y lo más fácil de postergar". A diferencia
+del resto de esta carpeta, **sí se corrió de verdad**, dos veces, en una
+carpeta aislada que imita la estructura de una instalación (`backend/`,
+`frontend/dist/`, `VERSION`), con datos reales (un admin, un producto, una
+venta) sembrados a través de un servidor levantado de verdad:
+
+1. **Camino feliz**: se armó un paquete `.zip` con el código actual y
+   `VERSION=0.2.0`, y se corrió `actualizar.ps1 -ArchivoZip ... -OmitirServicio
+   -SinConfirmar`. Resultado verificado leyendo los archivos directo (no la
+   salida del script): `VERSION` pasó a `0.2.0`, `frontend/dist` se reemplazó,
+   se hizo un respaldo antes de tocar nada, y los datos (usuario, venta, stock
+   ya descontado) siguieron intactos.
+2. **Camino de falla**: se armó un segundo paquete con una migración de
+   Alembic rota a propósito (`op.execute("ESTO NO ES SQL VALIDO...")`)
+   encadenada sobre la cabeza real. `actualizar.ps1` detectó el fallo de
+   `alembic upgrade head`, **revirtió solo** el código, `VERSION` y la base
+   (restaurando el respaldo hecho al principio, incluidos los `-wal`/`-shm`)
+   y volvió a dejar todo exactamente como estaba antes de intentarlo. Se
+   verificó `alembic_version` en la base restaurada (la revisión rota no
+   quedó aplicada) y que el backend arrancaba y el login seguía andando
+   después de la reversión.
+
+Lo que **no** se probó: bajar el paquete de verdad desde GitHub Releases (el
+repositorio todavía no publicó ningún release — `-ArchivoZip` existe
+justamente para poder probar el mecanismo sin depender de eso), y correrlo
+con un servicio de NSSM real en vez de `-OmitirServicio`.
+
+`.github/workflows/release.yml` es el otro lado: arma el mismo formato de
+`.zip` (código + `frontend/dist` compilado + `VERSION` en la raíz) y lo
+publica en GitHub Releases cuando se pushea un tag `vX.Y.Z` que coincida con
+el archivo `VERSION` del repositorio. Tampoco se corrió — significaría
+publicar un release real — pero el YAML se validó que parsea correctamente.
 
 ## Prerrequisitos para terminar esto
 

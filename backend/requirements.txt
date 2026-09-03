@@ -9,6 +9,12 @@ pyjwt==2.13.0
 python-multipart==0.0.30
 mercadopago==3.2.0
 
+# Ya venía instalado como dependencia transitiva de mercadopago, pero se
+# declara acá porque ahora también lo usa app/actualizaciones.py directamente:
+# sin declararlo, un requirements.txt futuro que cambie el SDK de Mercado Pago
+# se lo llevaría puesto en silencio.
+requests==2.34.2
+
 # Base de zonas horarias IANA. En Linux `zoneinfo` la toma del sistema, pero
 # Windows no la trae, y ahí `ZoneInfo("America/Argentina/Buenos_Aires")` falla.
 # Sin esto, ZONA_HORARIA quedaba en silencio sin efecto justo en el sistema

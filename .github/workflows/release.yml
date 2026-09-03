@@ -1,0 +1,70 @@
+name: Release
+
+# Publica el .zip que baja installer/scripts/actualizar.ps1. Se dispara con un
+# tag "vX.Y.Z" que tiene que coincidir con el archivo VERSION del repositorio:
+# si no coincide, se corta antes de publicar nada — mejor un release que no
+# sale a que salga uno que dice ser una versión que no es.
+#
+#   git tag v0.2.0 && git push origin v0.2.0
+#
+# No se dispara solo en cada push a main: publicar un release es una acción
+# deliberada, con el número de versión ya decidido de antemano en VERSION.
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # crear el release y subir el .zip
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+        working-directory: frontend
+
+      - run: pnpm build
+        working-directory: frontend
+
+      - name: El tag tiene que coincidir con VERSION
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [ "$tag" != "$version" ]; then
+            echo "El tag ($GITHUB_REF_NAME) no coincide con VERSION ($version)." >&2
+            echo "Actualizá VERSION y volvé a taggear, o borrá este tag si fue un error." >&2
+            exit 1
+          fi
+
+      - name: Armar el paquete
+        run: |
+          set -e
+          mkdir -p paquete/dist
+          cp -r backend/app paquete/app
+          cp -r backend/alembic paquete/alembic
+          cp backend/alembic.ini backend/requirements.txt backend/seed_admin.py backend/restaurar_respaldo.py paquete/
+          cp VERSION paquete/VERSION
+          cp -r frontend/dist/. paquete/dist/
+          find paquete -name "__pycache__" -type d -prune -exec rm -rf {} +
+          (cd paquete && zip -r "../SistemaInventariosPOS-${GITHUB_REF_NAME}.zip" .)
+
+      - name: Publicar el release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            "SistemaInventariosPOS-${GITHUB_REF_NAME}.zip" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes

@@ -467,6 +467,13 @@ export const api = {
     return this.parseJson(res, 'Error obteniendo configuración');
   },
 
+  async chequearActualizacion() {
+    const res = await fetch(`${API_URL}/actualizaciones/disponible`, { headers: this.headers });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'Error consultando actualizaciones');
+    return this.parseJson(res, 'Error consultando actualizaciones');
+  },
+
   async updateConfiguracion(valores: Record<string, any>) {
     const res = await fetch(`${API_URL}/configuracion/`, {
       method: 'PUT',

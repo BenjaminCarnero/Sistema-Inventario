@@ -71,7 +71,7 @@ async def limitar_tamano_body(request: Request, call_next):
 PREFIJOS_API = (
     "/auth", "/productos", "/ventas", "/cajas", "/reportes", "/pagos",
     "/descuentos", "/configuracion", "/devoluciones", "/stock", "/categorias",
-    "/proveedores", "/pedidos", "/auditoria", "/respaldos",
+    "/proveedores", "/pedidos", "/auditoria", "/respaldos", "/actualizaciones",
     "/health", "/docs", "/redoc", "/openapi.json",
 )
 
@@ -203,7 +203,7 @@ def health_check():
 from app.routers import (
     auth, productos, ventas, cajas, reportes, pagos, descuentos,
     configuracion, devoluciones, stock, categorias, proveedores, pedidos,
-    auditoria, respaldos,
+    auditoria, respaldos, actualizaciones,
 )
 app.include_router(auth.router)
 app.include_router(productos.router)
@@ -220,6 +220,7 @@ app.include_router(proveedores.router)
 app.include_router(pedidos.router)
 app.include_router(auditoria.router)
 app.include_router(respaldos.router)
+app.include_router(actualizaciones.router)
 
 
 # --- Frontend ---------------------------------------------------------------

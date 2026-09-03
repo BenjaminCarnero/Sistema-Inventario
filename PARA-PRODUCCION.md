@@ -74,14 +74,25 @@ Esto es lo más importante de todo el documento y lo más fácil de postergar.
 **Hoy no hay ningún mecanismo para llevar un arreglo hasta la máquina del local 7.** Si mañana
 aparece un bug en el arqueo, la única forma es ir o pedir escritorio remoto, local por local.
 
-- [ ] 🔴 Comando o botón de actualización que baje la versión nueva, **haga un respaldo antes**,
-      corra `alembic upgrade head` y reinicie el servicio.
-- [ ] 🔴 Vuelta atrás: si la migración falla, restaurar el respaldo y volver a la versión anterior.
-      `restaurar_respaldo.py` ya existe y es la mitad del camino.
+- [x] 🔴 Comando de actualización que baja la versión nueva, **hace un respaldo antes**, corre
+      `alembic upgrade head` y reinicia el servicio — **`installer/scripts/actualizar.ps1`, probado
+      de punta a punta dos veces** (camino feliz y camino de falla) en una instalación aislada con
+      datos reales. `.github/workflows/release.yml` es el otro lado: arma el `.zip` que este script
+      baja de GitHub Releases cuando se publica un tag `vX.Y.Z`. Detalle completo en
+      `installer/README.md`. Falta probarlo bajando un release real (todavía no se publicó ninguno) y
+      con un servicio NSSM real en vez de `-OmitirServicio`.
+- [x] 🔴 Vuelta atrás: si la migración falla, restaurar el respaldo y volver a la versión anterior —
+      **integrada en el mismo `actualizar.ps1` y probada de verdad**: se le dio una migración rota a
+      propósito, y solo revirtió código, `VERSION` y base de datos (incluidos los `-wal`/`-shm`) al
+      estado exacto de antes de intentar la actualización. `restaurar_respaldo.py` sigue existiendo
+      aparte para la restauración manual e interactiva (§5).
 - [x] 🔴 Versión visible en la interfaz — **hecho y verificado en el navegador**. Un archivo `VERSION`
       en la raíz, expuesto en `GET /health` y mostrado al pie de Configuración › Parámetros del
       sistema.
-- [ ] 🟡 Que el sistema avise cuándo hay versión nueva en lugar de que la pidas vos.
+- [x] 🟡 Que el sistema avise cuándo hay versión nueva — **hecho y verificado**. `GET
+      /actualizaciones/disponible` compara `VERSION` contra el último release de GitHub (falla
+      abierto: si GitHub no contesta, no avisa nada, nunca bloquea); el panel de Configuración
+      muestra un banner cuando corresponde.
 
 ## 3 · El mostrador: impresora y lector 🔴 — 1 semana
 
