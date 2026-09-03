@@ -518,6 +518,24 @@ function POS() {
     }
   };
 
+  const handleImprimir = async (venta: VentaOffline) => {
+    // Sin impresora configurada, o venta que todavía no tiene id del
+    // servidor (offline, sin sincronizar todavía): no hay contra qué
+    // imprimir en la térmica, así que se sigue usando el diálogo del
+    // navegador, que es lo único que puede andar sin conexión.
+    if (!config.impresora_habilitada || !venta.id) {
+      window.print();
+      return;
+    }
+    try {
+      await api.imprimirTicket(venta.id);
+      showToast('Imprimiendo en la térmica...', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'No se pudo imprimir en la térmica. Se abre el diálogo del navegador.', 'error');
+      window.print();
+    }
+  };
+
   const cerrarRecibo = () => {
     setShowReceipt(false);
     setClientPhone('');
@@ -1815,7 +1833,7 @@ function POS() {
                 Enviar Ticket por WhatsApp
               </button>
               
-              <button onClick={() => window.print()} className="w-full bg-black text-white py-3 rounded-lg flex justify-center items-center gap-2 font-bold hover:bg-gray-800">
+              <button onClick={() => handleImprimir(lastSale)} className="w-full bg-black text-white py-3 rounded-lg flex justify-center items-center gap-2 font-bold hover:bg-gray-800">
                 <Printer size={20} /> Imprimir Recibo Fisico
               </button>
               <button onClick={cerrarRecibo} className="w-full bg-gray-200 text-black py-3 rounded-lg font-bold mt-2">

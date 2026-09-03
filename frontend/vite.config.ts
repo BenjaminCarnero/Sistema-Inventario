@@ -68,6 +68,14 @@ export default defineConfig({
       // index en vez de la API— y andado bien en producción.
       '/auditoria': 'http://127.0.0.1:8001',
       '/respaldos': 'http://127.0.0.1:8001',
+      '/actualizaciones': 'http://127.0.0.1:8001',
+      // Se descubrió faltante probando la impresión térmica de punta a punta
+      // en el navegador: sin esto, "Imprimir" fallaba con un error de red
+      // silencioso y caía al window.print() de siempre, que además puede
+      // quedarse esperando un diálogo nativo que un navegador headless nunca
+      // resuelve. Exactamente el mismo bug que ya se había dado con
+      // /auditoria y /respaldos — este router es nuevo y quedó afuera igual.
+      '/impresion': 'http://127.0.0.1:8001',
       // Lo usa el POS para saber si el servidor responde de verdad
       '/health': 'http://127.0.0.1:8001',
     }

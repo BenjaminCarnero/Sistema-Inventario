@@ -96,12 +96,24 @@ aparece un bug en el arqueo, la única forma es ir o pedir escritorio remoto, lo
 
 ## 3 · El mostrador: impresora y lector 🔴 — 1 semana
 
-- [ ] 🔴 **Impresora térmica ESC/POS.** Los tres puntos de impresión usan `window.print()`, o sea el
-      diálogo del navegador: `App.tsx:1712`, `Admin.tsx:1374` y `Admin.tsx:3212`. Ningún comercio
-      imprime tickets así. Hace falta 58/80 mm por USB o red, con **corte automático** y **apertura
-      de cajón**.
-- [ ] 🔴 Ticket con el formato real del comercio: nombre, dirección, CUIT si corresponde, detalle,
-      total, forma de pago y número de operación.
+- [x] 🔴 **Impresora térmica ESC/POS — hecha para el ticket del POS (`App.tsx`) y verificada de
+      punta a punta con una impresora simulada.** `backend/app/ticket_escpos.py` arma los comandos
+      crudos (corte y apertura de cajón incluidos) y `backend/app/impresora.py` los manda por red al
+      puerto 9100 (el "raw"/JetDirect que trae casi toda térmica con Ethernet o WiFi) — no por USB
+      todavía, ver abajo. Se probó real: un socket TCP local haciendo de impresora, una venta hecha en
+      el navegador de punta a punta, "Imprimir" apretado de verdad, y los bytes recibidos —484 de
+      ellos— verificados uno por uno (arrancan con reset, tienen el corte parcial y terminan en la
+      apertura del cajón). En el camino se encontraron y corrigieron dos bugs reales: `/impresion` y
+      `/actualizaciones` faltaban en el proxy de desarrollo de Vite (mismo error histórico que ya
+      había pasado con `/auditoria` y `/respaldos`), y sin eso "Imprimir" caía en `window.print()`
+      *silencioso*, que en un navegador sin operador puede quedarse esperando un diálogo que nunca
+      llega. **Falta USB local** (necesitaría `pywin32`, sin impresora real no se puede probar) y
+      reemplazar los otros dos `window.print()` (`Admin.tsx:1374` reimpresión, `Admin.tsx:3212`
+      remito a proveedor) — quedaron con el diálogo del navegador.
+- [x] 🔴 Ticket con el formato real del comercio — **ya estaba resuelto en el HTML y ahora también en
+      el ESC/POS**: nombre, dirección, CUIT/teléfono si están cargados, detalle con cantidad y
+      precio, descuento aplicado, desglose de IVA, total, forma de pago (recibido/vuelto en efectivo,
+      "Abonado con X" en el resto) y número de operación.
 - [ ] 🟡 Reimpresión del último ticket. Se pide el primer día de uso, siempre.
 - [ ] 🟢 Comprar una impresora propia (~$70.000 a $80.000, una sola vez) para desarrollar y para las
       demos.

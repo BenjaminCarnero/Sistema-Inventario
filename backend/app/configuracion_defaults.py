@@ -99,6 +99,28 @@ DEFAULTS = {
         "descripcion": "Mostrar el nombre del negocio destacado arriba del ticket",
     },
 
+    # ---- Impresora térmica ----
+    "impresora_habilitada": {
+        "valor": "false", "tipo": "boolean", "categoria": "impresora",
+        "descripcion": "Imprimir en una térmica ESC/POS en vez de usar el diálogo de impresión del navegador",
+    },
+    "impresora_ip": {
+        "valor": "", "tipo": "string", "categoria": "impresora",
+        "descripcion": "IP de la impresora en la red del local (la mayoría de las térmicas con Ethernet o WiFi usan el puerto 9100)",
+    },
+    "impresora_puerto": {
+        "valor": "9100", "tipo": "number", "categoria": "impresora",
+        "descripcion": "Puerto de impresión por red. 9100 (raw/JetDirect) es el que trae la gran mayoría de las térmicas",
+    },
+    "impresora_ancho_caracteres": {
+        "valor": "42", "tipo": "number", "categoria": "impresora",
+        "descripcion": "Caracteres por línea: 32 para papel de 58mm, 42 o 48 para 80mm (según el modelo)",
+    },
+    "impresora_abrir_cajon": {
+        "valor": "false", "tipo": "boolean", "categoria": "impresora",
+        "descripcion": "Abrir el cajón de dinero al imprimir el ticket (necesita el cajón conectado a la impresora)",
+    },
+
     # ---- Reposición ----
     "pedido_saludo": {
         "valor": "Hola, te hago un pedido:", "tipo": "string", "categoria": "reposicion",
@@ -121,6 +143,7 @@ CATEGORIAS = {
     "moneda": "Moneda",
     "pos": "Punto de venta",
     "ticket": "Ticket",
+    "impresora": "Impresora térmica",
     "reposicion": "Pedidos a proveedores",
 }
 

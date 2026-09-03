@@ -467,6 +467,16 @@ export const api = {
     return this.parseJson(res, 'Error obteniendo configuración');
   },
 
+  async imprimirTicket(ventaId: number) {
+    const res = await fetch(`${API_URL}/impresion/venta/${ventaId}`, {
+      method: 'POST',
+      headers: this.headers,
+    });
+    if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }
+    if (!res.ok) throw await this.errorDe(res, 'No se pudo imprimir en la térmica');
+    return this.parseJson(res, 'No se pudo imprimir en la térmica');
+  },
+
   async chequearActualizacion() {
     const res = await fetch(`${API_URL}/actualizaciones/disponible`, { headers: this.headers });
     if (res.status === 401) { localStorage.removeItem('token'); window.location.reload(); }

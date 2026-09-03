@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Store, Percent, Coins, ShoppingBag, Receipt, RotateCcw, Save, AlertTriangle, Palette, Upload, Image as ImageIcon, ArrowUpCircle } from 'lucide-react';
+import { Store, Percent, Coins, ShoppingBag, Receipt, RotateCcw, Save, AlertTriangle, Palette, Upload, Image as ImageIcon, ArrowUpCircle, Printer } from 'lucide-react';
 import { api } from '../api';
 import { useUI } from './UIProvider';
 import { useConfig } from './ConfigProvider';
@@ -21,6 +21,7 @@ const ICONOS: Record<string, typeof Store> = {
   moneda: Coins,
   pos: ShoppingBag,
   ticket: Receipt,
+  impresora: Printer,
 };
 
 const TITULOS: Record<string, string> = {
@@ -30,6 +31,7 @@ const TITULOS: Record<string, string> = {
   moneda: 'Moneda',
   pos: 'Punto de venta',
   ticket: 'Ticket',
+  impresora: 'Impresora térmica',
 };
 
 const ETIQUETAS: Record<string, string> = {
@@ -51,6 +53,11 @@ const ETIQUETAS: Record<string, string> = {
   metodos_pago_habilitados: 'Métodos de pago habilitados',
   ticket_mensaje_pie: 'Mensaje del pie',
   ticket_mostrar_logo: 'Mostrar nombre del negocio destacado',
+  impresora_habilitada: 'Imprimir en térmica en vez de usar el navegador',
+  impresora_ip: 'IP de la impresora',
+  impresora_puerto: 'Puerto',
+  impresora_ancho_caracteres: 'Caracteres por línea',
+  impresora_abrir_cajon: 'Abrir el cajón de dinero al imprimir',
 };
 
 const METODOS_DISPONIBLES = ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'MERCADOPAGO'];

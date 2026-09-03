@@ -21,6 +21,11 @@ export interface Config {
   metodos_pago_habilitados: string[];
   ticket_mensaje_pie: string;
   ticket_mostrar_logo: boolean;
+  impresora_habilitada: boolean;
+  impresora_ip: string;
+  impresora_puerto: number;
+  impresora_ancho_caracteres: number;
+  impresora_abrir_cajon: boolean;
   pedido_saludo: string;
   pedido_despedida: string;
 }
@@ -49,6 +54,11 @@ export const CONFIG_DEFAULT: Config = {
   metodos_pago_habilitados: ['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'MERCADOPAGO'],
   ticket_mensaje_pie: '¡Gracias por su compra!',
   ticket_mostrar_logo: true,
+  impresora_habilitada: false,
+  impresora_ip: '',
+  impresora_puerto: 9100,
+  impresora_ancho_caracteres: 42,
+  impresora_abrir_cajon: false,
   pedido_saludo: 'Hola, te hago un pedido:',
   pedido_despedida: '¡Gracias!',
 };
