@@ -132,11 +132,15 @@ celular entra por `http://192.168.0.x`, **el navegador no da acceso a la cámara
 resuelve con `pnpm dev:celular` y un certificado autofirmado; en un comercio, un certificado
 autofirmado es una pantalla roja de advertencia que el cajero va a aprender a ignorar.
 
-- [ ] 🔴 Definir cómo se sirve HTTPS en la red del local (una CA local instalada en los equipos con
-      `mkcert`, o un nombre y certificado propios). **O** documentar que en celular se usa lector USB
-      y no cámara.
-- [ ] 🔴 Documentar la configuración de red: IP fija en la PC servidor, puerto abierto en el firewall
-      de Windows, y qué hacer cuando el router reparte otra IP.
+- [x] 🔴 Definir cómo se sirve HTTPS en la red del local — **decidido por la opción B**: documentado
+      en el [`README.md`](README.md#la-red-del-local) que en cualquier equipo se usa lector de código
+      de barras USB en vez de la cámara, para no sumarle a la instalación la complejidad de una CA
+      local. El camino de HTTPS con `mkcert` queda documentado como mejora a futuro si hace falta
+      escanear con la cámara de un celular sin cable.
+- [x] 🔴 Documentar la configuración de red: IP fija en la PC servidor, puerto abierto en el firewall
+      de Windows, y qué hacer cuando el router reparte otra IP — **hecho en el mismo README**, y de
+      paso `installer/scripts/instalar-servicio.ps1` ahora abre la regla de firewall solo (perfil
+      *Private* únicamente), en vez de dejarlo como un paso manual más para el día de la instalación.
 - [x] 🟡 Pantalla de diagnóstico — **hecho y verificado en el navegador**. Un link discreto en el
       login ("¿No podés entrar? Diagnóstico de conexión", `components/DiagnosticoRed.tsx`) muestra la
       dirección a la que está hablando el equipo, si el servidor contesta y en cuánto, la versión, y

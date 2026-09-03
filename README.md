@@ -364,6 +364,65 @@ Además:
 - Para varias cajas en simultáneo conviene pasar a SQL Server o PostgreSQL
   cambiando `DATABASE_URL`.
 
+### La red del local
+
+Esto no aparece en ninguna lista de "cómo instalar un backend" porque no es un
+problema del código: es un problema del comercio. Se descubre el día de la
+instalación si no se piensa antes.
+
+**IP fija en la PC que hace de servidor.** El resto de los equipos (otras
+cajas, el celular del dueño, una tablet) le hablan por su IP en la red local
+(`http://192.168.x.x`). Si el router le reparte una IP distinta cada vez que
+se reinicia (lo normal con DHCP), esa dirección se corta el día menos pensado
+y nadie sabe por qué "el sistema no anda" — en realidad el sistema está bien,
+lo que cambió es a dónde hay que apuntar. Dos formas de resolverlo, de más a
+menos prolija:
+
+1. **Reserva DHCP en el router**: se le dice al router "a la MAC tal, dale
+   siempre esta IP". El equipo se puede seguir reiniciando con DHCP normal.
+2. **IP estática en Windows**: configurada a mano en las propiedades del
+   adaptador de red. Más simple de explicar por teléfono, pero si el rango de
+   la red cambia (un router nuevo) hay que tocarla de nuevo a mano.
+
+Si un equipo dejó de conectarse después de tocar el router, el link *"¿No
+podés entrar? Diagnóstico de conexión"* que aparece debajo del login muestra a
+qué dirección le está intentando hablar ese equipo — suele alcanzar para
+darse cuenta de que la IP vieja ya no es la de la PC servidor.
+
+**Puerto abierto en el firewall de Windows.** Por default, el Firewall de
+Windows bloquea las conexiones entrantes a un puerto que no esté
+explícitamente permitido — incluso dentro de la misma red local. Sin esto, la
+PC servidor se contesta a sí misma perfectamente (por eso "en esta máquina
+funciona") y ningún otro equipo del local llega nunca. Hace falta una regla de
+entrada para el puerto que use el servicio (ver
+`installer/scripts/instalar-servicio.ps1`, por defecto 8000), en el perfil de
+red **privada** — nunca en el perfil público, que expondría el POS a cualquier
+red a la que se conecte esa PC.
+
+**HTTPS y la cámara del celular.** El escáner por cámara (`useCamera.ts`)
+funciona perfecto en desarrollo, pero los navegadores sólo prestan la cámara
+en un "contexto seguro": HTTPS, o `localhost`. Un celular que entra por
+`http://192.168.x.x` — que es como entra siempre en un comercio, salvo que se
+arme HTTPS a propósito — no la va a poder usar, y el POS lo detecta y avisa en
+vez de fallar en silencio.
+
+Se decidió **no forzar HTTPS en esta versión** para no sumarle a la
+instalación la complejidad de una autoridad certificadora propia (`mkcert`, un
+certificado por equipo) sólo para poder escanear con la cámara de un celular.
+La recomendación es la más simple: **en cualquier dispositivo que necesite
+escanear, usar un lector de código de barras USB** (tipo *wedge*: escribe en
+el campo como si fuera un teclado, no necesita driver ni configuración) en vez
+de la cámara. Es además más rápido y confiable en el mostrador que apuntar con
+el celular.
+
+Si en algún momento hace falta escanear con la cámara de un celular sin cable
+—por ejemplo, para reponer stock caminando por el depósito— existe el camino
+de HTTPS con certificado propio que ya usa el entorno de desarrollo
+(`pnpm dev:celular`, con el certificado de `scripts/generar-certificado.sh`):
+llevarlo a producción implica instalar esa CA en cada equipo que vaya a usar
+la cámara, lo cual es exactamente la complejidad operativa que se decidió
+evitar por ahora.
+
 ---
 
 ## Seguridad

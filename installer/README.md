@@ -15,7 +15,7 @@ verificó, sin instalar nada en el sistema:
 | Archivo | Verificación real hecha |
 |---|---|
 | `scripts/generar-env.ps1` | Parseo sin errores, corrida en modo `-NoInteractivo` contra una carpeta de prueba, y el `.env` que generó **pasó la validación estricta** de `ENTORNO=produccion` en `backend/app/config.py` sin abortar (se probó importando `app.config` con ese `.env`, después restaurado el original). |
-| `scripts/instalar-servicio.ps1` | Parseo sin errores. Se corrió sin privilegios de administrador y frenó con el mensaje correcto en vez de fallar feo — es lo único que se puede probar sin NSSM ni permisos elevados. |
+| `scripts/instalar-servicio.ps1` | Parseo sin errores. Se corrió sin privilegios de administrador y frenó con el mensaje correcto en vez de fallar feo — es lo único que se puede probar sin NSSM ni permisos elevados. Además de NSSM, ahora abre el puerto en el Firewall de Windows (perfil *Private* únicamente): se confirmó que `New-NetFirewallRule`/`Get-NetFirewallRule`/`Set-NetFirewallRule` existen en esta máquina, pero **no se creó ninguna regla real** — eso modifica el sistema y no es algo para probar sin que lo pidas. |
 | `scripts/desinstalar-servicio.ps1` | Parseo sin errores. No se ejecutó de punta a punta (necesita un servicio real instalado). |
 | `scripts/actualizar.ps1` | **Probado de punta a punta, dos veces, con `-OmitirServicio`** (no necesita NSSM). Ver la sección propia más abajo — a diferencia del resto de esta carpeta, esto sí se corrió de verdad. |
 | `setup.iss` | Sólo leído contra la documentación de Inno Setup. Nunca se compiló: no hay `iscc` en esta máquina. |

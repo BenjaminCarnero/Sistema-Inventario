@@ -98,6 +98,22 @@ if ($LASTEXITCODE -eq 0 -and $existente) {
 
 & $RutaNssm start $NombreServicio
 
+# Sin esto, el Firewall de Windows bloquea las conexiones entrantes al
+# puerto por default — incluso dentro de la misma red local. El síntoma es
+# "en esta PC funciona" (localhost sí llega) y ningún otro equipo del local
+# llega nunca, que es un error confuso de diagnosticar a distancia.
+#
+# Sólo en el perfil Private: el perfil Public es para redes que no son de
+# confianza (el wifi de un café), y ahí sí queremos que el puerto siga cerrado.
+$reglaExistente = Get-NetFirewallRule -DisplayName "Sistema de Inventario y POS" -ErrorAction SilentlyContinue
+if ($reglaExistente) {
+    Set-NetFirewallRule -DisplayName "Sistema de Inventario y POS" -LocalPort $Puerto -Profile Private | Out-Null
+} else {
+    New-NetFirewallRule -DisplayName "Sistema de Inventario y POS" `
+        -Direction Inbound -Action Allow -Protocol TCP -LocalPort $Puerto -Profile Private | Out-Null
+}
+
 Write-Host ""
 Write-Host "Servicio '$NombreServicio' instalado y arrancado en el puerto $Puerto." -ForegroundColor Green
+Write-Host "Regla de firewall abierta en el perfil de red privada." -ForegroundColor Green
 Write-Host "Verificar: nssm status $NombreServicio" -ForegroundColor DarkGray
