@@ -78,7 +78,9 @@ aparece un bug en el arqueo, la única forma es ir o pedir escritorio remoto, lo
       corra `alembic upgrade head` y reinicie el servicio.
 - [ ] 🔴 Vuelta atrás: si la migración falla, restaurar el respaldo y volver a la versión anterior.
       `restaurar_respaldo.py` ya existe y es la mitad del camino.
-- [ ] 🔴 Versión visible en la interfaz. Sin eso, soportar por teléfono es adivinar.
+- [x] 🔴 Versión visible en la interfaz — **hecho y verificado en el navegador**. Un archivo `VERSION`
+      en la raíz, expuesto en `GET /health` y mostrado al pie de Configuración › Parámetros del
+      sistema.
 - [ ] 🟡 Que el sistema avise cuándo hay versión nueva en lugar de que la pidas vos.
 
 ## 3 · El mostrador: impresora y lector 🔴 — 1 semana
@@ -118,8 +120,17 @@ autofirmado es una pantalla roja de advertencia que el cajero va a aprender a ig
 
 El sistema hace respaldos automáticos al cerrar caja y tiene pantalla propia. Bien. Pero:
 
-- [ ] 🔴 **Probar una restauración completa, de punta a punta, en una máquina limpia.** Un respaldo
-      que nunca se restauró no es un respaldo. Acordarse de los archivos `-wal` y `-shm`.
+- [x] 🔴 **Probar una restauración completa, de punta a punta.** Hecho el 02/09/2026 en una carpeta
+      aislada (backend copiado aparte, migrado desde cero — lo más parecido a una máquina limpia sin
+      levantar una VM): servidor real arriba, alta del primer admin, un producto, una venta de
+      verdad (con sus movimientos de stock), respaldo por el mismo endpoint que usa el botón de
+      Configuración, base "rota" a mano, `restaurar_respaldo.py` corrido de punta a punta con la
+      confirmación real. Verificado con el archivo restaurado leído directo (no confiando en la
+      salida del script): usuario, producto con el stock ya descontado y la venta, los tres intactos.
+      Los `-wal`/`-shm` de la base vieja se borraron solos, como corresponde, y quedó una copia
+      `.reemplazada_<fecha>` de la base rota antes de pisarla. El backend volvió a arrancar sobre la
+      base restaurada y el login siguió andando. Sigue pendiente probarlo en una VM de Windows limpia
+      de verdad — esto prueba que el mecanismo funciona, no reemplaza esa prueba antes de vender.
 - [ ] 🔴 Que el instalador configure `RESPALDO_EXTERNO` apuntando a OneDrive, Drive o un pendrive.
       Hoy depende de que el dueño edite el `.env`, o sea que **no va a pasar nunca** y las copias van
       a quedar en el mismo disco que se puede romper.
