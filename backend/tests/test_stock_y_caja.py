@@ -1,7 +1,6 @@
 """Entrada de mercadería, ajustes de inventario y arqueo de caja."""
-from datetime import datetime, timezone
-
 from app import models
+from app.fechas import hoy_local
 
 
 def vender(client, auth, producto_id, cantidad=1, metodo="EFECTIVO"):
@@ -117,9 +116,18 @@ class TestFiltrosDelHistorial:
         assert client.get("/stock/movimientos?tipo=ROBO", headers=auth_admin).status_code == 400
 
     def test_el_rango_incluye_el_dia_de_hoy_entero(self, client, auth_admin, producto, sin_iva):
-        """Con `hasta` mal implementado, lo de hoy quedaba afuera del reporte."""
+        """Con `hasta` mal implementado, lo de hoy quedaba afuera del reporte.
+
+        `hoy` tiene que salir de `hoy_local()`, la misma cuenta que hace el
+        propio backend para decidir qué es "hoy" — no de
+        `datetime.now(timezone.utc)`. Con ZONA_HORARIA sin configurar en el
+        entorno de test, el filtro usa la hora del sistema, y la fecha en UTC
+        y la fecha local difieren unas tres horas por día (más en otros husos):
+        calcular "hoy" por otro lado hacía que el test fallara solo, sin que
+        nadie tocara el código, en esa ventana horaria.
+        """
         self._con_movimientos(client, auth_admin, producto, sin_iva)
-        hoy = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        hoy = hoy_local().isoformat()
         movimientos = client.get(f"/stock/movimientos?desde={hoy}&hasta={hoy}", headers=auth_admin).json()
         assert len(movimientos) == 3
 
