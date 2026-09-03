@@ -27,8 +27,10 @@
       `frontend/dist`, más el ciclo de migraciones `up/down/up`. Se repitió después de cada tanda de
       cambios de esta sesión y siguió verde.
 - [x] 🔴 **Decidir el alcance fiscal** (ver §10) — **decidido el 03/09/2026: opción B**, ticket no
-      fiscal. Junto con el modelo de cobro (§8) y el tipo de licencia (§8), ya hay con qué escribir
-      una propuesta comercial; falta redactarla, que es trabajo de contenido, no de código.
+      fiscal. Junto con el modelo de cobro (§8) y el tipo de licencia (§8), ya había con qué escribir
+      una propuesta comercial — **redactada y publicada el mismo día**: qué incluye, qué no incluye
+      todavía (aclarando lo fiscal), cómo se instala, el piloto gratis, y la inversión (instalación +
+      suscripción, con los montos como campo a cotizar por caso).
 
 ---
 
@@ -221,8 +223,9 @@ días si no se resuelve antes.**
       rotados (`.1` a `.5`), y un botón en Configuración › Copias de seguridad lo baja con un clic.
       Probado bajando un zip real con los logs de esta misma sesión.
 - [ ] 🟡 Aviso cuando un local deja de reportar (indica servicio caído, no local cerrado)
-- [ ] 🟡 Manual del comerciante de una página: cómo abrir caja, vender, cerrar, y qué hacer si no
-      anda internet
+- [x] 🟡 Manual del comerciante de una página — **redactado y publicado el 03/09/2026**: abrir caja,
+      vender, cerrar, reimprimir el último ticket, qué hacer sin internet y qué hacer si no se puede
+      ni entrar. Falta completar el número real de WhatsApp cuando esté decidido.
 - [ ] 🟢 Rotación de `SECRET_KEY` documentada (cierra todas las sesiones: hacerlo fuera de horario)
 
 ## 8 · Legal y comercial 🟡 — antes de la primera venta
@@ -232,11 +235,14 @@ Nada de esto existe hoy y todo es barato de resolver.
 - [x] 🟡 Archivo `LICENSE` en el repositorio — **hecho el 03/09/2026**: propietario, todos los
       derechos reservados (decisión tomada ese día). El uso por parte de un comercio queda remitido
       al contrato de licencia, que es el ítem que sigue sin escribir.
-- [ ] 🟡 Contrato de licencia: qué incluye, qué no, y **límite de responsabilidad si se pierde la
-      base** — sigue sin redactarse. Ahora sí hay un modelo de cobro decidido en qué basarlo
-      (suscripción mensual por local, ver abajo); falta el texto legal en sí, idealmente revisado por
-      alguien con matrícula.
-- [ ] 🟡 Política de datos: los datos son del comercio, dónde viven, qué pasa si deja de pagar
+- [x] 🟡 Contrato de licencia: qué incluye, qué no, y **límite de responsabilidad si se pierde la
+      base** — **borrador redactado y publicado el 03/09/2026** con las 12 cláusulas usuales (objeto,
+      alcance, propiedad intelectual, datos, precio, vigencia, terminación, soporte, obligaciones,
+      límite de responsabilidad, confidencialidad, jurisdicción) y los montos como campos a completar.
+      **Lleva un aviso explícito y visible: es un punto de partida, no un contrato para firmar sin que
+      lo revise un abogado matriculado** — eso sigue pendiente y no lo reemplaza nada de lo hecho acá.
+- [x] 🟡 Política de datos: los datos son del comercio, dónde viven, qué pasa si deja de pagar —
+      **redactada y publicada el 03/09/2026**, referenciada como anexo del contrato de licencia.
 - [x] 🟡 Precio y forma de cobro — **decidido el 03/09/2026: suscripción mensual por local**, en línea
       con lo que ya proponía `ANALISIS-PRE-VENTA.md` §9.5-9.7 (más un cargo único de instalación).
       Con esto elegido, el "chequeo falla abierto" de §9 deja de ser una idea abstracta: una
@@ -270,8 +276,8 @@ interno, no un comprobante.
       emitido es un problema del cliente con el fisco. **No elegido.**
 - [x] **B** — Salir como **sistema de gestión e inventario con ticket no fiscal**, integrable
       después. Es un producto legítimo y más chico, pero **tiene que estar escrito en la propuesta
-      comercial**, no aclararse cuando el cliente pregunta. **Elegido.** Falta redactar esa aclaración
-      en el material comercial (todavía no existe una propuesta comercial escrita).
+      comercial**, no aclararse cuando el cliente pregunta. **Elegido, y ya escrito** en la propuesta
+      comercial redactada el 03/09/2026 (§8).
 
 > Con la opción B, migrar el dinero de `FLOAT` a centavos enteros (§11, M-12) deja de ser una
 > urgencia — sigue siendo deuda técnica real, pero ya no bloquea nada. Se vuelve a poner sobre la mesa
